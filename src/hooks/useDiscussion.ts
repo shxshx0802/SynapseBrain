@@ -238,12 +238,16 @@ export function useDiscussion(roomId: string) {
   }, [postAI])
 
   // 新房间启动：把创建时填写的议题抛给所有 AI 方向，保证「讨论你提出的问题」
+  // 判定条件用「还没有人类消息」而非「无存档」，老房间升级后也能补启动
   const bootedRef = useRef(false)
   useEffect(() => {
     if (bootedRef.current) return
     bootedRef.current = true
     const topic = topicRef.current
-    if (initialRef.current !== null || !topic) return
+    const hasHumanMsg = Object.values(messagesRef.current)
+      .flat()
+      .some((m) => m.roleId === HUMAN_ID)
+    if (hasHumanMsg || !topic) return
     const t = `议题：「${topic}」。请大家围绕这个议题，从各自方向展开讨论。`
     pushMessage(HUMAN_ID, t)
     const t1 = window.setTimeout(() => postAI(t), 1000)
