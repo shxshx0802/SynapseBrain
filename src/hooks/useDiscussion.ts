@@ -16,7 +16,7 @@ import {
   relationTypeOf,
 } from '@/ai/mockData'
 
-const TICK_MS = 2200
+const TICK_MS = 3000
 const MERGE_CHECK_MS = 250
 const MERGE_RANGE = 1.12 // 距离 < (r1+r2) * 1.12 视为进入拼接
 const MAX_SPHERES = 14
@@ -26,6 +26,22 @@ const SYSTEM_PROMPTS: Record<string, string> = {
   arch: '你是「小构」，一位资深软件架构师，在一场多人多 AI 的圆桌讨论中负责技术方向。要求：发言简洁有判断、每次只推进一个观点，50~120 字；关注架构取舍、性能与工程质量。其他参与者（商业、风险方向）也在发言，你可以回应或反驳他们。',
   biz: '你是「小商」，一位商业化顾问，在同一场圆桌讨论中负责商业方向。要求：发言简洁、每次只推进一个观点，50~120 字；关注定价、市场、增长、竞品与商业风险。你会与其他方向（技术、风险）的参与者互动。',
   risk: '你是「小稳」，一位风险审查官，在同一场圆桌讨论中负责风险方向。要求：习惯唱反调、指出方案的裂缝与成本，每次一个观点，50~120 字；关注额度消耗、隐私合规与可靠性。你会与其他方向（技术、商业）的参与者互动。',
+}
+
+/** 上下文里的发言者标记只供模型理解对话结构，绝不允许被模仿进输出 */
+const OUTPUT_GUARD =
+  '\n\n输出要求：只输出你的观点正文。不要复述「某某说：」这类发言者前缀，不要编号列表，不要客套话，不要重复别人的话。'
+
+/** 清洗模型输出：去掉它模仿上下文格式产生的发言者标记；清洗后过短视为失败 */
+function sanitizeModelOutput(raw: string): string {
+  let s = raw.trim()
+  s = s.replace(/^(【[^】]{1,12}】[：:]?\s*)+/, '')
+  s = s.replace(/^(【[^】]{1,12}】?\s*)+/, '')
+  s = s.replace(/^（[^）]{1,12}）说[：:]\s*/, '')
+  s = s.replace(/^([一-龥A-Za-z]{1,12}说[：:]\s*)+/, '')
+  if ((s.match(/【/g) || []).length >= 3) s = s.replace(/【[^】]{1,12}】/g, '')
+  if ((s.match(/说：/g) || []).length >= 2) s = s.replace(/[一-龥A-Za-z]{1,12}说：/g, '')
+  return s.trim()
 }
 
 function welcomeMessages(): Record<string, ChatMessage[]> {
@@ -55,7 +71,11 @@ export function useDiscussion(roomId: string) {
   const [mode] = useState<'live' | 'demo'>(() => (isLiveMode() ? 'live' : 'demo'))
   const initialRef = useRef(loadRoomState(roomId))
   const [roles, setRoles] = useState<AIRole[]>(() => initialRef.current?.roles ?? INITIAL_ROLES)
-  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(() => initialRef.current?.messages ?? welcomeMessages())
+  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(() => {
+    const loaded = initialRef.current?.messages ?? welcomeMessages()
+    // 清理历史遗留的「…」占位符（早期版本替换失败可能残留）
+    return Object.fromEntries(Object.entries(loaded).map(([k, v]) => [k, v.filter((m) => m.text !== '…')]))
+  })
   const [spheres, setSpheres] = useState<KeySphereT[]>(() => initialRef.current?.spheres ?? seedSpheres())
   const [bubbles, setBubbles] = useState<RelationBubble[]>([])
   const [merged, setMerged] = useState<Record<string, MergedPair>>({})
@@ -78,10 +98,10 @@ export function useDiscussion(roomId: string) {
   const enginePausedRef = useRef(enginePaused)
   enginePausedRef.current = enginePaused
 
-  const pushMessage = useCallback((roleId: string, text: string) => {
+  const pushMessage = useCallback((roleId: string, text: string, id?: string) => {
     setMessages((prev) => {
       const list = prev[roleId] ?? []
-      return { ...prev, [roleId]: [...list, { id: makeId(), roleId, threadId: roleId, text, at: Date.now() }] }
+      return { ...prev, [roleId]: [...list, { id: id ?? makeId(), roleId, threadId: roleId, text, at: Date.now() }] }
     })
   }, [])
 
@@ -179,9 +199,8 @@ export function useDiscussion(roomId: string) {
     [addSphere, chargeRole],
   )
 
-  /** 构建给模型的近期上下文（全员讨论流，带说话人前缀） */
+  /** 构建给模型的近期上下文：人类消息带标记，AI 消息不署名（避免被模仿进输出） */
   const recentContext = useCallback((): ProviderMessage[] => {
-    const roleName = (id: string) => INITIAL_ROLES.find((r) => r.id === id)?.name ?? id
     return Object.values(messagesRef.current)
       .flat()
       .sort((a, b) => a.at - b.at)
@@ -189,7 +208,7 @@ export function useDiscussion(roomId: string) {
       .slice(-12)
       .map((m) => ({
         role: m.roleId === HUMAN_ID ? ('user' as const) : ('assistant' as const),
-        content: `【${m.roleId === HUMAN_ID ? '你（人类参与者）' : roleName(m.roleId)}】${m.text}`,
+        content: m.roleId === HUMAN_ID ? `你（人类参与者）说：${m.text}` : m.text,
       }))
   }, [])
 
@@ -205,29 +224,34 @@ export function useDiscussion(roomId: string) {
         ? `关于你说的「${replyTo.slice(0, 14)}${replyTo.length > 14 ? '…' : ''}」，我的视角是：${pool[idx % pool.length]}`
         : pool[idx % pool.length]
       const provider = providerRef.current
-      if (!provider || inflightRef.current >= MAX_INFLIGHT) {
+      if (!provider) {
+        // 演示模式：直接走本地话术
         pushMessage(role.id, mockText)
         chargeRole(role.id, (role.downshifted ? 60 : 140) + mockText.length * 2)
         if (Math.random() < 0.3) spawnSphereMock(role)
         return
       }
+      // 实时模式：并发打满时本轮直接跳过，等飞行中的请求落地（不能用 mock 凑数，否则刷屏）
+      if (inflightRef.current >= MAX_INFLIGHT) return
       inflightRef.current += 1
       const tmpId = makeId()
-      pushMessage(role.id, '…')
+      pushMessage(role.id, '…', tmpId)
       void (async () => {
         try {
           const topicLine = topicRef.current
             ? `\n\n本次讨论议题：「${topicRef.current}」。请始终围绕该议题发言，引用具体细节，不要跑题。`
             : ''
           const msgs: ProviderMessage[] = [
-            { role: 'system', content: SYSTEM_PROMPTS[role.id] + topicLine },
+            { role: 'system', content: SYSTEM_PROMPTS[role.id] + topicLine + OUTPUT_GUARD },
             ...recentContext(),
           ]
           if (replyTo) msgs.push({ role: 'user', content: `人类参与者刚说：「${replyTo}」。请直接回应他/她，承接上下文。` })
           const res = await provider.chat(msgs, { maxTokens: role.downshifted ? 400 : 800 })
-          replaceMessage(role.id, tmpId, res.text)
+          const cleaned = sanitizeModelOutput(res.text)
+          if (cleaned.length < 4) throw new Error('模型输出被清洗后过短')
+          replaceMessage(role.id, tmpId, cleaned)
           chargeRole(role.id, res.tokens)
-          if (Math.random() < 0.35) void spawnSphereLive(role, res.text, provider)
+          if (Math.random() < 0.35) void spawnSphereLive(role, cleaned, provider)
         } catch (err) {
           console.warn('[KeySphere] 实时调用失败，回退演示话术：', err)
           replaceMessage(role.id, tmpId, mockText)
@@ -319,15 +343,17 @@ export function useDiscussion(roomId: string) {
                 : `${topicLine}人类参与者拖入了文件《${doc.name}》${doc.truncated ? '（内容较长已截断）' : ''}，全文如下：\n\n${doc.content}\n\n请阅读后给出你这个方向的核心判断（100 字以内），并点出最值得做成关键球的一个概念。`
             const res = await provider.chat(
               [
-                { role: 'system', content: SYSTEM_PROMPTS[role.id] },
+                { role: 'system', content: SYSTEM_PROMPTS[role.id] + OUTPUT_GUARD },
                 ...recentContext(),
                 { role: 'user', content: userContent },
               ],
               { maxTokens: role.downshifted ? 400 : 800 },
             )
-            replaceMessage(role.id, tmpId, res.text)
+            const cleaned = sanitizeModelOutput(res.text)
+            if (cleaned.length < 4) throw new Error('模型输出被清洗后过短')
+            replaceMessage(role.id, tmpId, cleaned)
             chargeRole(role.id, res.tokens)
-            if (Math.random() < 0.6) void spawnSphereLive(role, res.text, provider)
+            if (Math.random() < 0.6) void spawnSphereLive(role, cleaned, provider)
           } catch (err) {
             console.warn('[KeySphere] 文档阅读失败：', err)
             replaceMessage(role.id, tmpId, `（我没能读完这份文件，可能是网络或额度问题。）`)
@@ -379,7 +405,9 @@ export function useDiscussion(roomId: string) {
           const parsed = JSON.parse(cleaned) as { type?: string; text?: string }
           const valid = ['supports', 'contradicts', 'causes', 'analogy'].includes(parsed.type ?? '') && typeof parsed.text === 'string'
           if (!valid) throw new Error('模型未返回合法 JSON')
-          upsertBubble(key, a, b, parsed.type as RelationType, parsed.text as string, author.id, Date.now())
+          const cleanedText = sanitizeModelOutput(parsed.text as string)
+          if (cleanedText.length < 4) throw new Error('关系解读被清洗后过短')
+          upsertBubble(key, a, b, parsed.type as RelationType, cleanedText, author.id, Date.now())
           chargeRole(author.id, res.tokens)
         } catch {
           /* 保留已展示的模板气泡 */

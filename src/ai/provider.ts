@@ -29,30 +29,37 @@ function createMoonshotProvider(): ChatProvider {
     id: 'moonshot',
     label: `Kimi ${config.moonshotModel}`,
     async chat(messages, opts) {
-      const res = await fetch(`${config.moonshotBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.moonshotKey}`,
-        },
-        body: JSON.stringify({
-          model: config.moonshotModel,
-          messages,
-          // 部分网关模型（如 agent-gw 的 k2d8-preview）只允许 temperature=1：
-          // 不传则交给服务端默认值，避免 400
-          ...(opts?.temperature != null ? { temperature: opts.temperature } : {}),
-          max_tokens: opts?.maxTokens ?? 400,
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.text().catch(() => '')
-        throw new Error(`Kimi API ${res.status}: ${body.slice(0, 200)}`)
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 90_000) //  hang 保护：90s 未响应自动放弃
+      try {
+        const res = await fetch(`${config.moonshotBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${config.moonshotKey}`,
+          },
+          body: JSON.stringify({
+            model: config.moonshotModel,
+            messages,
+            // 部分网关模型（如 agent-gw 的 k2d8-preview）只允许 temperature=1：
+            // 不传则交给服务端默认值，避免 400
+            ...(opts?.temperature != null ? { temperature: opts.temperature } : {}),
+            max_tokens: opts?.maxTokens ?? 400,
+          }),
+          signal: controller.signal,
+        })
+        if (!res.ok) {
+          const body = await res.text().catch(() => '')
+          throw new Error(`Kimi API ${res.status}: ${body.slice(0, 200)}`)
+        }
+        const data = await res.json()
+        const text: string = data.choices?.[0]?.message?.content ?? ''
+        if (!text) throw new Error('Kimi API 返回了空内容')
+        const tokens: number = data.usage?.total_tokens ?? Math.ceil(text.length / 2)
+        return { text: text.trim(), tokens }
+      } finally {
+        clearTimeout(timer)
       }
-      const data = await res.json()
-      const text: string = data.choices?.[0]?.message?.content ?? ''
-      if (!text) throw new Error('Kimi API 返回了空内容')
-      const tokens: number = data.usage?.total_tokens ?? Math.ceil(text.length / 2)
-      return { text: text.trim(), tokens }
     },
   }
 }
