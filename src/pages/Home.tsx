@@ -51,6 +51,9 @@ export default function Home() {
             </h1>
           </div>
           <p className="pl-1 text-sm text-slate-500">每个项目一块独立画布，多 AI 分方向讨论，互不混淆</p>
+          <a href="/lab" className="mt-2 inline-block pl-1 text-xs text-slate-600 underline decoration-dotted transition-colors hover:text-slate-300">
+            🧪 手势 & 语音实验室（测试页）
+          </a>
         </header>
 
         {/* 创建新项目 */}
