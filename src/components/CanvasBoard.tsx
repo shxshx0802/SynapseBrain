@@ -19,11 +19,12 @@ interface Props {
   /** 整理布局后的自动取景请求（半宽/半高 + nonce），画布据此缩放到能看见整个环形 */
   fitRequest?: { halfW: number; halfH: number; nonce: number } | null
   onMoveSphere: (id: string, x: number, y: number) => void
+  onResizeSphere: (id: string, r: number) => void
   onAttachFile: (file: File) => void
   onInspect: (id: string) => void
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, onMoveSphere, onAttachFile, onInspect }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, onMoveSphere, onResizeSphere, onAttachFile, onInspect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fxCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -37,7 +38,9 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null)
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null)
   const pinchRef = useRef<{ d0: number; k0: number; mid0: { x: number; y: number }; v0: View } | null>(null)
-  const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  /** 双指落在同一颗球上时改为捏合调球大小 */
+  const pinchResizeRef = useRef<{ id: string; d0: number; r0: number } | null>(null)
+  const pointersRef = useRef(new Map<number, { x: number; y: number; sphereId: string | null }>())
   /** 双击检测：pointer capture 会把真实 dblclick 重定向到容器，球上的 onDoubleClick 收不到，
       改为手动判定——同一颗球两次轻点（间隔 <450ms、位移 <6px）即视为双击 */
   const tapRef = useRef<{ id: string; t: number; x: number; y: number; moved: boolean } | null>(null)
@@ -182,6 +185,13 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
+      // 悬停在关键球上滚动 = 调节球大小；空白处滚动 = 缩放画布
+      const sphereEl = (e.target as HTMLElement).closest('[data-sphere]') as HTMLElement | null
+      if (sphereEl) {
+        const s = spheres.find((x) => x.id === sphereEl.dataset.sid)
+        if (s) onResizeSphere(s.id, s.r * Math.exp(-e.deltaY * 0.0015))
+        return
+      }
       const rect = el.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
@@ -195,7 +205,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [spheres, onResizeSphere])
 
   const localPoint = (e: React.PointerEvent) => {
     const rect = containerRef.current!.getBoundingClientRect()
@@ -213,15 +223,26 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     const s = spheres.find((x) => x.id === id)
     if (!s) return
     const p = localPoint(e)
+    pointersRef.current.set(e.pointerId, { ...p, sphereId: id })
     const w = toWorld(p.x, p.y, viewRef.current)
     dragRef.current = { id, dx: w.x - s.x, dy: w.y - s.y }
     tapRef.current = { id: s.id, t: Date.now(), x: e.clientX, y: e.clientY, moved: false }
+    // 第二根手指也落在同一颗球上 → 进入捏合调大小模式
+    if (pointersRef.current.size === 2) {
+      const pts = Array.from(pointersRef.current.values())
+      if (pts.every((q) => q.sphereId === id)) {
+        const [p1, p2] = pts
+        dragRef.current = null
+        tapRef.current = null
+        pinchResizeRef.current = { id, d0: Math.hypot(p1.x - p2.x, p1.y - p2.y), r0: s.r }
+      }
+    }
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-sphere]')) return
     const p = localPoint(e)
-    pointersRef.current.set(e.pointerId, p)
+    pointersRef.current.set(e.pointerId, { ...p, sphereId: null })
     try {
       containerRef.current?.setPointerCapture(e.pointerId)
     } catch {
@@ -243,7 +264,15 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (pointersRef.current.has(e.pointerId)) {
-      pointersRef.current.set(e.pointerId, localPoint(e))
+      const prev = pointersRef.current.get(e.pointerId)!
+      pointersRef.current.set(e.pointerId, { ...localPoint(e), sphereId: prev.sphereId })
+    }
+    if (pinchResizeRef.current && pointersRef.current.size >= 2) {
+      const [p1, p2] = Array.from(pointersRef.current.values())
+      const d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
+      const { id, d0, r0 } = pinchResizeRef.current
+      onResizeSphere(id, (r0 * d) / Math.max(d0, 1))
+      return
     }
     if (pinchRef.current && pointersRef.current.size >= 2) {
       const [p1, p2] = Array.from(pointersRef.current.values())
@@ -286,7 +315,10 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     }
     tapRef.current = null
     pointersRef.current.delete(e.pointerId)
-    if (pointersRef.current.size < 2) pinchRef.current = null
+    if (pointersRef.current.size < 2) {
+      pinchRef.current = null
+      pinchResizeRef.current = null
+    }
     if (pointersRef.current.size === 0) panRef.current = null
     dragRef.current = null
     try {

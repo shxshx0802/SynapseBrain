@@ -376,6 +376,12 @@ export function useDiscussion(roomId: string) {
     setSpheres((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)))
   }, [])
 
+  /** 手动调节球体大小（滚轮悬停 / 双指捏合），钳制在 32~150 世界单位 */
+  const resizeSphere = useCallback((id: string, r: number) => {
+    const clamped = Math.min(150, Math.max(32, r))
+    setSpheres((prev) => prev.map((s) => (s.id === id && Math.abs(s.r - clamped) > 0.5 ? { ...s, r: clamped } : s)))
+  }, [])
+
   /** 一键整理：按拼接关系并查集聚簇，簇间横排、簇内环形（大球居中），平滑补间过去 */
   const layoutAnimRef = useRef(0)
   const layoutBusyRef = useRef(false)
@@ -583,5 +589,5 @@ export function useDiscussion(roomId: string) {
 
   const toggleEngine = useCallback(() => setEnginePaused((p) => !p), [])
 
-  return { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, layoutSpheres }
+  return { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, resizeSphere, layoutSpheres }
 }

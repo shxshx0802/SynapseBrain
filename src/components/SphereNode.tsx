@@ -21,6 +21,7 @@ export function SphereNode({ sphere: s, view: v, shake, reduceMotion, onPointerD
   return (
     <div
       data-sphere="true"
+      data-sid={s.id}
       onPointerDown={(e) => onPointerDown(e, s.id)}
       onDoubleClick={(e) => {
         e.stopPropagation()
@@ -31,7 +32,7 @@ export function SphereNode({ sphere: s, view: v, shake, reduceMotion, onPointerD
         width: r * 2,
         height: r * 2,
         transform: `translate(${sx - r}px, ${sy - r}px)`,
-        fontSize: Math.max(10, 13 * v.k),
+        fontSize: Math.max(9, 13 * v.k * (s.r / 72)),
         background: 'radial-gradient(circle at 32% 28%, #ffffff, #b9c0ca 46%, #6d7581 100%)',
         boxShadow: `0 0 ${Math.max(10, 26 * v.k)}px rgba(255,255,255,0.35), inset 0 0 ${Math.max(8, 20 * v.k)}px rgba(255,255,255,0.45)`,
         ...(shakeAmp > 0 ? ({ '--shake-amp': `${shakeAmp.toFixed(2)}px`, animation: 'ks-shake 0.42s linear infinite' } as CSSProperties) : {}),

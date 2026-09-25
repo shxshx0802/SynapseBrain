@@ -12,7 +12,7 @@ import { getProject } from '@/shared/storage'
 
 export default function Room() {
   const { id = '' } = useParams()
-  const { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, layoutSpheres } = useDiscussion(id)
+  const { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, resizeSphere, layoutSpheres } = useDiscussion(id)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [inspectId, setInspectId] = useState<string | null>(null)
   const [fitRequest, setFitRequest] = useState<{ halfW: number; halfH: number; nonce: number } | null>(null)
@@ -92,6 +92,7 @@ export default function Room() {
             enginePaused={enginePaused}
             fitRequest={fitRequest}
             onMoveSphere={moveSphere}
+            onResizeSphere={resizeSphere}
             onAttachFile={attachDocument}
             onInspect={setInspectId}
           />
