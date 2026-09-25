@@ -16,12 +16,14 @@ interface Props {
   roles: AIRole[]
   reduceMotion: boolean
   onMoveSphere: (id: string, x: number, y: number) => void
+  onAttachFile: (file: File) => void
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onMoveSphere }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onMoveSphere, onAttachFile }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [view, setView] = useState<View>({ x: 480, y: 320, k: 1 })
+  const [dragOver, setDragOver] = useState(false)
 
   const viewRef = useRef(view)
   viewRef.current = view
@@ -225,6 +227,17 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragOver(false)
+        const files = Array.from(e.dataTransfer.files).slice(0, 3)
+        files.forEach((f, i) => window.setTimeout(() => onAttachFile(f), i * 1600))
+      }}
     >
       {/* SVG goo 滤镜定义：高斯模糊 + alpha 色阶截断 → 流体融球 */}
       <svg width="0" height="0" className="absolute">
@@ -264,8 +277,18 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
         )
       })}
 
-      <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-slate-900/70 px-4 py-1.5 text-xs text-slate-400 backdrop-blur">
-        拖动空白处平移 · 滚轮 / 双指捏合缩放 · 把两个关键球拖到一起试试
+      {/* 文件拖放遮罩 */}
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-2xl border-2 border-dashed border-white/40 px-10 py-8 text-center">
+            <p className="text-lg font-bold text-white">松开，把文件丢给 AI</p>
+            <p className="mt-1.5 text-xs text-slate-400">支持 PDF · DOCX · 图片 · 文本 / 代码文件</p>
+          </div>
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/70 px-4 py-1.5 text-xs text-slate-500 backdrop-blur">
+        拖文件进画布，AI 立刻阅读讨论 · 拖动空白平移 · 滚轮 / 双指缩放 · 两球相碰有惊喜
       </div>
     </div>
   )

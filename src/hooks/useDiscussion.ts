@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AIRole, ChatMessage, KeySphereT, MergedPair, RelationBubble, RelationType } from '@/shared/types'
 import { isLiveMode } from '@/shared/config'
 import { getProject, loadRoomState, saveRoomState, touchProject } from '@/shared/storage'
-import { createDefaultProvider, type ChatProvider, type ProviderMessage } from '@/ai/provider'
+import { createDefaultProvider, type ChatProvider, type ContentPart, type ProviderMessage } from '@/ai/provider'
+import { extractDocument } from '@/ai/document'
 import {
   HUMAN_ID,
   INITIAL_ROLES,
@@ -268,6 +269,68 @@ export function useDiscussion(roomId: string) {
     [postAI, pushMessage],
   )
 
+  /** 拖入文件：提取内容 → 展示摘要 → 让 AI 立刻阅读并结合议题讨论 */
+  const attachDocument = useCallback(
+    (file: File) => {
+      const pendingId = makeId()
+      setMessages((prev) => ({
+        ...prev,
+        [HUMAN_ID]: [...(prev[HUMAN_ID] ?? []), { id: pendingId, roleId: HUMAN_ID, threadId: HUMAN_ID, text: `📎 已拖入文件《${file.name}》，正在提取内容…`, at: Date.now() }],
+      }))
+      void (async () => {
+        try {
+          const doc = await extractDocument(file)
+          const head = doc.kind === 'text' ? doc.content.slice(0, 500) : `[图片 ${(doc.size / 1024).toFixed(1)} KB]`
+          const visible =
+            `📎 我拖入了文件《${doc.name}》` +
+            (doc.kind === 'text' ? `（全文 ${doc.size.toLocaleString()} 字${doc.truncated ? '，已截断' : ''}）` : '') +
+            `：\n「${head}${doc.kind === 'text' && doc.content.length > 500 ? '…' : ''}」\n请大家阅读这份材料，结合议题从各自方向展开讨论。`
+          replaceMessage(HUMAN_ID, pendingId, visible)
+
+          const provider = providerRef.current
+          const active = rolesRef.current.filter((r) => !r.paused)
+          if (!provider || !active.length || inflightRef.current >= MAX_INFLIGHT) {
+            window.setTimeout(() => postAI(visible), 500)
+            return
+          }
+          const role = active[Math.floor(Math.random() * active.length)]
+          inflightRef.current += 1
+          const tmpId = makeId()
+          pushMessage(role.id, '…')
+          try {
+            const topicLine = topicRef.current ? `当前议题：「${topicRef.current}」。` : ''
+            const userContent: string | ContentPart[] =
+              doc.kind === 'image'
+                ? [
+                    { type: 'image_url', image_url: { url: doc.content } },
+                    { type: 'text', text: `${topicLine}人类参与者拖入了图片《${doc.name}》。请描述图中内容，并分析它与当前讨论的关系，80 字以内。` },
+                  ]
+                : `${topicLine}人类参与者拖入了文件《${doc.name}》${doc.truncated ? '（内容较长已截断）' : ''}，全文如下：\n\n${doc.content}\n\n请阅读后给出你这个方向的核心判断（100 字以内），并点出最值得做成关键球的一个概念。`
+            const res = await provider.chat(
+              [
+                { role: 'system', content: SYSTEM_PROMPTS[role.id] },
+                ...recentContext(),
+                { role: 'user', content: userContent },
+              ],
+              { maxTokens: role.downshifted ? 400 : 800 },
+            )
+            replaceMessage(role.id, tmpId, res.text)
+            chargeRole(role.id, res.tokens)
+            if (Math.random() < 0.6) void spawnSphereLive(role, res.text, provider)
+          } catch (err) {
+            console.warn('[KeySphere] 文档阅读失败：', err)
+            replaceMessage(role.id, tmpId, `（我没能读完这份文件，可能是网络或额度问题。）`)
+          } finally {
+            inflightRef.current -= 1
+          }
+        } catch (err) {
+          replaceMessage(HUMAN_ID, pendingId, `⚠️ 文件《${file.name}》处理失败：${(err as Error).message}`)
+        }
+      })()
+    },
+    [chargeRole, postAI, pushMessage, recentContext, replaceMessage, spawnSphereLive],
+  )
+
   const approveRole = useCallback((roleId: string) => {
     setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, used: Math.floor(r.used * 0.5), paused: false } : r)))
   }, [])
@@ -376,5 +439,5 @@ export function useDiscussion(roomId: string) {
     return () => window.clearTimeout(t)
   }, [messages, spheres, roles, roomId])
 
-  return { mode, roles, messages, spheres, bubbles, merged, sendHuman, approveRole, moveSphere }
+  return { mode, roles, messages, spheres, bubbles, merged, sendHuman, attachDocument, approveRole, moveSphere }
 }

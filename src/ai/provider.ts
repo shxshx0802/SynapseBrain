@@ -1,9 +1,14 @@
 // AI Provider 抽象：业务代码只允许通过本文件访问模型厂商，禁止直接 import 任何厂商 SDK
 import { config } from '@/shared/config'
 
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ProviderMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  /** 纯文本，或图文混合（视觉模型） */
+  content: string | ContentPart[]
 }
 
 export interface ChatResult {

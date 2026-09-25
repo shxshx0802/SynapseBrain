@@ -10,7 +10,7 @@ import { getProject } from '@/shared/storage'
 
 export default function Room() {
   const { id = '' } = useParams()
-  const { mode, roles, messages, spheres, bubbles, merged, sendHuman, approveRole, moveSphere } = useDiscussion(id)
+  const { mode, roles, messages, spheres, bubbles, merged, sendHuman, attachDocument, approveRole, moveSphere } = useDiscussion(id)
   const [reduceMotion, setReduceMotion] = useState(false)
   const project = getProject(id)
 
@@ -54,6 +54,7 @@ export default function Room() {
           roles={roles}
           reduceMotion={reduceMotion}
           onMoveSphere={moveSphere}
+          onAttachFile={attachDocument}
         />
       </div>
     </div>
