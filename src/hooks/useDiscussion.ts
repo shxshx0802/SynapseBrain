@@ -376,6 +376,80 @@ export function useDiscussion(roomId: string) {
     setSpheres((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)))
   }, [])
 
+  /** 一键整理：按拼接关系并查集聚簇，簇间横排、簇内环形（大球居中），平滑补间过去 */
+  const layoutAnimRef = useRef(0)
+  const layoutBusyRef = useRef(false)
+  const layoutSpheres = useCallback(() => {
+    if (layoutAnimRef.current) return
+    const sp = spheresRef.current
+    if (sp.length === 0) return
+    layoutBusyRef.current = true // 补间期间暂停拼接检测，避免路过误触发
+    // 并查集：当前拼接的球进同一簇
+    const parent = new Map(sp.map((s) => [s.id, s.id]))
+    const find = (x: string): string => {
+      let r = x
+      while (parent.get(r) !== r) r = parent.get(r)!
+      parent.set(x, r)
+      return r
+    }
+    for (const m of Object.values(merged)) {
+      const ra = find(m.aId)
+      const rb = find(m.bId)
+      if (ra !== rb) parent.set(ra, rb)
+    }
+    const clusters = new Map<string, KeySphereT[]>()
+    for (const s of sp) {
+      const r = find(s.id)
+      const arr = clusters.get(r) ?? []
+      arr.push(s)
+      clusters.set(r, arr)
+    }
+    // 目标位置：簇按大小从左到右排，簇内大球在环心、其余环绕
+    const targets = new Map<string, { x: number; y: number }>()
+    let cursor = 0
+    for (const cl of Array.from(clusters.values()).sort((a, b) => b.length - a.length)) {
+      const maxR = Math.max(...cl.map((s) => s.r))
+      if (cl.length === 1) {
+        targets.set(cl[0].id, { x: cursor + maxR, y: 0 })
+        cursor += maxR * 2 + 140
+      } else {
+        const ringR = Math.max(150, maxR * 2.2)
+        const sorted = [...cl].sort((a, b) => b.r - a.r)
+        targets.set(sorted[0].id, { x: cursor + ringR, y: 0 })
+        sorted.slice(1).forEach((s, i) => {
+          const ang = (i / (sorted.length - 1)) * Math.PI * 2 - Math.PI / 2
+          targets.set(s.id, { x: cursor + ringR + Math.cos(ang) * ringR, y: Math.sin(ang) * ringR * 0.82 })
+        })
+        cursor += ringR * 2 + maxR + 180
+      }
+    }
+    // 整体水平居中
+    const shift = -cursor / 2
+    for (const t of targets.values()) t.x += shift
+    // 平滑补间（ease-out cubic）
+    const from = new Map(sp.map((s) => [s.id, { x: s.x, y: s.y }]))
+    const t0 = performance.now()
+    const dur = 620
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur)
+      const e = 1 - Math.pow(1 - k, 3)
+      setSpheres((prev) =>
+        prev.map((s) => {
+          const f = from.get(s.id)
+          const tg = targets.get(s.id)
+          if (!f || !tg) return s
+          return { ...s, x: f.x + (tg.x - f.x) * e, y: f.y + (tg.y - f.y) * e }
+        }),
+      )
+      layoutAnimRef.current = k < 1 ? requestAnimationFrame(step) : 0
+      if (k >= 1) layoutBusyRef.current = false
+    }
+    layoutAnimRef.current = requestAnimationFrame(step)
+  }, [merged])
+
+  // 卸载时清理补间动画
+  useEffect(() => () => cancelAnimationFrame(layoutAnimRef.current), [])
+
   /** 生成关系气泡（实时模式由模型解读，失败或演示模式用确定性模板） */
   const upsertBubble = useCallback(
     (key: string, a: KeySphereT, b: KeySphereT, type: RelationType, text: string, authorId: string, now: number) => {
@@ -420,6 +494,7 @@ export function useDiscussion(roomId: string) {
   // 拼接检测：靠近 → 融球 + 震动 + AI 关系解读；分开 → 撤掉气泡
   useEffect(() => {
     const check = () => {
+      if (layoutBusyRef.current) return
       const sp = spheresRef.current
       const found: Record<string, MergedPair> = {}
       const now = Date.now()
@@ -480,5 +555,5 @@ export function useDiscussion(roomId: string) {
 
   const toggleEngine = useCallback(() => setEnginePaused((p) => !p), [])
 
-  return { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere }
+  return { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, layoutSpheres }
 }

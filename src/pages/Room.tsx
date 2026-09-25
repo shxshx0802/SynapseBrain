@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowLeft, Orbit, Pause, Play } from 'lucide-react'
+import { ArrowLeft, LayoutGrid, Orbit, Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -12,7 +12,7 @@ import { getProject } from '@/shared/storage'
 
 export default function Room() {
   const { id = '' } = useParams()
-  const { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere } = useDiscussion(id)
+  const { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, layoutSpheres } = useDiscussion(id)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [inspectId, setInspectId] = useState<string | null>(null)
   const project = getProject(id)
@@ -47,6 +47,16 @@ export default function Room() {
         </div>
         <div className="flex items-center gap-2">
           <span className="mr-1 text-[11px] text-slate-500">{roles.filter((r) => !r.paused).length + 1} 位参与者在线</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 rounded-lg border-white/15 bg-black/50 text-xs hover:bg-white/10"
+            onClick={layoutSpheres}
+            title="按拼接关系自动整理球簇布局"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            整理布局
+          </Button>
           <Button
             size="sm"
             variant={enginePaused ? 'default' : 'outline'}

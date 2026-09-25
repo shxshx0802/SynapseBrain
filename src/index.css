@@ -4,33 +4,34 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    /* 唯一主题即黑色主题：任何状态、任何页面都不出现浅色桌面 */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
     --radius: 0.625rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
@@ -79,23 +80,29 @@
   background: var(--quota-color, hsl(var(--primary)));
 }
 
-/* 关键球拼接时的震动反馈 */
-@keyframes ks-shake {  0%,
+/* 关键球拼接时的震动反馈：幅度由 --shake-amp 控制（随拼接深度缩放），
+   每个周期前 20% 从 0 缓入，避免一接触就满幅抖动 */
+@keyframes ks-shake {
+  0%,
   100% {
     margin-left: 0;
     margin-top: 0;
   }
-  25% {
-    margin-left: 2.5px;
-    margin-top: -1.5px;
+  20% {
+    margin-left: var(--shake-amp, 2px);
+    margin-top: calc(var(--shake-amp, 2px) * -0.6);
   }
-  50% {
-    margin-left: -2px;
-    margin-top: 1.5px;
+  40% {
+    margin-left: calc(var(--shake-amp, 2px) * -0.8);
+    margin-top: calc(var(--shake-amp, 2px) * 0.6);
   }
-  75% {
-    margin-left: 1.5px;
-    margin-top: 2px;
+  60% {
+    margin-left: calc(var(--shake-amp, 2px) * 0.5);
+    margin-top: var(--shake-amp, 2px);
+  }
+  80% {
+    margin-left: calc(var(--shake-amp, 2px) * -0.4);
+    margin-top: calc(var(--shake-amp, 2px) * -0.5);
   }
 }
 

@@ -35,6 +35,10 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
   const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null)
   const pinchRef = useRef<{ d0: number; k0: number; mid0: { x: number; y: number }; v0: View } | null>(null)
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  /** 双击检测：pointer capture 会把真实 dblclick 重定向到容器，球上的 onDoubleClick 收不到，
+      改为手动判定——同一颗球两次轻点（间隔 <450ms、位移 <6px）即视为双击 */
+  const tapRef = useRef<{ id: string; t: number; x: number; y: number; moved: boolean } | null>(null)
+  const lastTapRef = useRef<{ id: string; t: number } | null>(null)
 
   /** 融球渲染层：rAF 持续绘制，SVG goo 滤镜让靠近的球产生流体融合 */
   useEffect(() => {
@@ -57,28 +61,40 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
           const v = viewRef.current
           const { spheres: sp, merged: mg } = drawStateRef.current
           const now = performance.now()
+          // 拼接中的球：光波更密更亮（双重涟漪）
+          const mergingIds = new Set<string>()
+          for (const key of Object.keys(mg)) {
+            mergingIds.add(mg[key].aId)
+            mergingIds.add(mg[key].bId)
+          }
 
           for (const s of sp) {
             const sx = s.x * v.k + v.x
             const sy = s.y * v.k + v.y
             const r = s.r * v.k
-            const pulse = s.pulseAt && !reduceMotion ? Math.max(0, 1 - (now - s.pulseAt) / 700) : 0
+            const inMerge = mergingIds.has(s.id)
+            // pulseAt 用的是 Date.now() 时钟，这里必须同钟比较；clamp 防脏数据
+            const pulse = s.pulseAt && !reduceMotion ? Math.min(1, Math.max(0, 1 - (Date.now() - s.pulseAt) / 700)) : 0
             // 灰色球体：画小一圈（0.88r），让 HTML 球面盖住 goo 滤镜的模糊边缘，避免缩放时的重影
             ctx.beginPath()
             ctx.arc(sx, sy, r * 0.88 * (1 + pulse * 0.12), 0, Math.PI * 2)
             ctx.fillStyle = '#9aa3af'
             ctx.fill()
-            // 阵阵白色光波：周期性从球心扩散的涟漪
+            // 阵阵白色光波：周期性从球心扩散的涟漪；拼接中的球加倍（两条错峰涟漪、更亮更快）
             if (!reduceMotion) {
-              const period = 2400 + (s.bornAt % 800)
-              const phase = ((now + s.bornAt) % period) / period
-              ctx.beginPath()
-              ctx.arc(sx, sy, r * (1.05 + phase * 1.8), 0, Math.PI * 2)
-              ctx.strokeStyle = '#ffffff'
-              ctx.lineWidth = 1.5
-              ctx.globalAlpha = (1 - phase) * 0.3
-              ctx.stroke()
-              ctx.globalAlpha = 1
+              const period = inMerge ? 1300 : 2400 + (s.bornAt % 800)
+              const ripple = (offset: number, alpha: number) => {
+                const phase = ((now + s.bornAt + offset) % period) / period
+                ctx.beginPath()
+                ctx.arc(sx, sy, r * (1.05 + phase * 1.8), 0, Math.PI * 2)
+                ctx.strokeStyle = '#ffffff'
+                ctx.lineWidth = 1.5
+                ctx.globalAlpha = (1 - phase) * alpha
+                ctx.stroke()
+                ctx.globalAlpha = 1
+              }
+              ripple(0, inMerge ? 0.55 : 0.3)
+              if (inMerge) ripple(period / 2, 0.4)
             }
             // 拼接触发时的强脉冲光环
             if (pulse > 0) {
@@ -98,15 +114,32 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
             const a = sp.find((s) => s.id === m.aId)
             const b = sp.find((s) => s.id === m.bId)
             if (!a || !b) continue
-            const mx = ((a.x + b.x) / 2) * v.k + v.x
-            const my = ((a.y + b.y) / 2) * v.k + v.y
-            const br = Math.min(a.r, b.r) * v.k * (0.45 + m.intensity * 0.65)
+            const ax = a.x * v.k + v.x
+            const ay = a.y * v.k + v.y
+            const bx = b.x * v.k + v.x
+            const by = b.y * v.k + v.y
+            const mx = (ax + bx) / 2
+            const my = (ay + by) / 2
+            const d = Math.hypot(ax - bx, ay - by)
+            // 桥接球大到盖住两球接缝并溢出球面边缘，融球轮廓才能透出 HTML 球面被看见
+            const minR = Math.min(a.r, b.r) * v.k
+            const br = Math.max(d / 2, minR) + minR * (0.3 + m.intensity * 0.5)
             ctx.beginPath()
             ctx.arc(mx, my, br, 0, Math.PI * 2)
             ctx.fillStyle = '#c9d1dd'
             ctx.globalAlpha = 0.95
             ctx.fill()
             ctx.globalAlpha = 1
+            // 减少动态效果时：用静态光环标示拼接关系，替代震动与脉冲
+            if (reduceMotion) {
+              ctx.beginPath()
+              ctx.arc(mx, my, br + 14, 0, Math.PI * 2)
+              ctx.strokeStyle = '#ffffff'
+              ctx.lineWidth = 2
+              ctx.globalAlpha = 0.5
+              ctx.stroke()
+              ctx.globalAlpha = 1
+            }
           }
         }
       }
@@ -145,19 +178,28 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
 
   const onSpherePointerDown = (e: React.PointerEvent, id: string) => {
     e.stopPropagation()
-    containerRef.current?.setPointerCapture(e.pointerId)
+    try {
+      containerRef.current?.setPointerCapture(e.pointerId)
+    } catch {
+      /* 合成事件无活动指针，忽略 */
+    }
     const s = spheres.find((x) => x.id === id)
     if (!s) return
     const p = localPoint(e)
     const w = toWorld(p.x, p.y, viewRef.current)
     dragRef.current = { id, dx: w.x - s.x, dy: w.y - s.y }
+    tapRef.current = { id: s.id, t: Date.now(), x: e.clientX, y: e.clientY, moved: false }
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-sphere]')) return
     const p = localPoint(e)
     pointersRef.current.set(e.pointerId, p)
-    containerRef.current?.setPointerCapture(e.pointerId)
+    try {
+      containerRef.current?.setPointerCapture(e.pointerId)
+    } catch {
+      /* 合成事件无活动指针，忽略 */
+    }
     if (pointersRef.current.size === 2) {
       const [p1, p2] = Array.from(pointersRef.current.values())
       panRef.current = null
@@ -187,6 +229,10 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       return
     }
     if (dragRef.current) {
+      const tap = tapRef.current
+      if (tap && tap.id === dragRef.current.id && !tap.moved && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 6) {
+        tap.moved = true
+      }
       const p = localPoint(e)
       const w = toWorld(p.x, p.y, viewRef.current)
       onMoveSphere(dragRef.current.id, w.x - dragRef.current.dx, w.y - dragRef.current.dy)
@@ -199,6 +245,19 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
+    // 双击判定（真实 dblclick 被 pointer capture 截走，这里手动识别）
+    const tap = tapRef.current
+    if (tap && !tap.moved) {
+      const now = Date.now()
+      const last = lastTapRef.current
+      if (last && last.id === tap.id && now - last.t < 450) {
+        onInspect(tap.id)
+        lastTapRef.current = null
+      } else {
+        lastTapRef.current = { id: tap.id, t: now }
+      }
+    }
+    tapRef.current = null
     pointersRef.current.delete(e.pointerId)
     if (pointersRef.current.size < 2) pinchRef.current = null
     if (pointersRef.current.size === 0) panRef.current = null
@@ -210,10 +269,12 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     }
   }
 
-  const shakingIds = new Set<string>()
+  /** 每颗球的震动强度 = 它参与的拼接对中的最大 intensity */
+  const shakeById = new Map<string, number>()
   for (const key of Object.keys(merged)) {
-    shakingIds.add(merged[key].aId)
-    shakingIds.add(merged[key].bId)
+    const m = merged[key]
+    shakeById.set(m.aId, Math.max(shakeById.get(m.aId) ?? 0, m.intensity))
+    shakeById.set(m.bId, Math.max(shakeById.get(m.bId) ?? 0, m.intensity))
   }
 
   return (
@@ -259,7 +320,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
           key={s.id}
           sphere={s}
           view={view}
-          shaking={shakingIds.has(s.id)}
+          shake={shakeById.get(s.id) ?? 0}
           reduceMotion={reduceMotion}
           onPointerDown={onSpherePointerDown}
           onInspect={onInspect}
