@@ -59,16 +59,30 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
             const sy = s.y * v.k + v.y
             const r = s.r * v.k
             const pulse = s.pulseAt && !reduceMotion ? Math.max(0, 1 - (now - s.pulseAt) / 700) : 0
+            // 灰色球体
             ctx.beginPath()
             ctx.arc(sx, sy, r * (1 + pulse * 0.12), 0, Math.PI * 2)
-            ctx.fillStyle = s.color
+            ctx.fillStyle = '#9aa3af'
             ctx.fill()
+            // 阵阵白色光波：周期性从球心扩散的涟漪
+            if (!reduceMotion) {
+              const period = 2400 + (s.bornAt % 800)
+              const phase = ((now + s.bornAt) % period) / period
+              ctx.beginPath()
+              ctx.arc(sx, sy, r * (1.05 + phase * 1.8), 0, Math.PI * 2)
+              ctx.strokeStyle = '#ffffff'
+              ctx.lineWidth = 1.5
+              ctx.globalAlpha = (1 - phase) * 0.3
+              ctx.stroke()
+              ctx.globalAlpha = 1
+            }
+            // 拼接触发时的强脉冲光环
             if (pulse > 0) {
               ctx.beginPath()
               ctx.arc(sx, sy, r * (1.4 + (1 - pulse) * 1.8), 0, Math.PI * 2)
-              ctx.strokeStyle = s.color
+              ctx.strokeStyle = '#ffffff'
               ctx.lineWidth = 2.5
-              ctx.globalAlpha = pulse * 0.8
+              ctx.globalAlpha = pulse * 0.9
               ctx.stroke()
               ctx.globalAlpha = 1
             }
@@ -85,7 +99,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
             const br = Math.min(a.r, b.r) * v.k * (0.45 + m.intensity * 0.65)
             ctx.beginPath()
             ctx.arc(mx, my, br, 0, Math.PI * 2)
-            ctx.fillStyle = a.color
+            ctx.fillStyle = '#c9d1dd'
             ctx.globalAlpha = 0.95
             ctx.fill()
             ctx.globalAlpha = 1
@@ -201,10 +215,10 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
   return (
     <div
       ref={containerRef}
-      className="relative min-w-0 flex-1 touch-none overflow-hidden bg-slate-950"
+      className="relative min-w-0 flex-1 touch-none overflow-hidden bg-black"
       style={{
         backgroundImage:
-          'radial-gradient(circle at 1px 1px, rgba(148,163,184,0.18) 1px, transparent 0)',
+          'radial-gradient(circle at 1px 1px, rgba(148,163,184,0.14) 1px, transparent 0)',
         backgroundSize: '28px 28px',
       }}
       onPointerDown={onPointerDown}

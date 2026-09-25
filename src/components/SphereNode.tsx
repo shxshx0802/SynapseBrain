@@ -20,13 +20,13 @@ export function SphereNode({ sphere: s, view: v, shaking, reduceMotion, onPointe
         width: s.r * 2,
         height: s.r * 2,
         transform: `translate(${sx}px, ${sy}px) scale(${v.k}) translate(${-s.r}px, ${-s.r}px)`,
-        background: `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.9), ${s.color} 46%, ${s.color} 100%)`,
-        boxShadow: `0 0 32px ${s.color}59, inset 0 0 26px rgba(255,255,255,0.22)`,
+        background: 'radial-gradient(circle at 32% 28%, #ffffff, #b9c0ca 46%, #6d7581 100%)',
+        boxShadow: '0 0 34px rgba(255,255,255,0.38), inset 0 0 26px rgba(255,255,255,0.45)',
         animation: shaking && !reduceMotion ? 'ks-shake 0.12s linear infinite' : undefined,
         touchAction: 'none',
       }}
     >
-      <span className="px-3 text-center text-sm leading-tight font-bold text-slate-950/90 drop-shadow-sm">
+      <span className="px-3 text-center text-sm leading-tight font-bold text-slate-900 drop-shadow-sm">
         {s.label}
       </span>
     </div>

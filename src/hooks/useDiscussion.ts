@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AIRole, ChatMessage, KeySphereT, MergedPair, RelationBubble, RelationType } from '@/shared/types'
 import { isLiveMode } from '@/shared/config'
+import { loadRoomState, saveRoomState, touchProject } from '@/shared/storage'
 import { createDefaultProvider, type ChatProvider, type ProviderMessage } from '@/ai/provider'
 import {
   HUMAN_ID,
@@ -47,11 +48,12 @@ function seedSpheres(): KeySphereT[] {
   }))
 }
 
-export function useDiscussion() {
+export function useDiscussion(roomId: string) {
   const [mode] = useState<'live' | 'demo'>(() => (isLiveMode() ? 'live' : 'demo'))
-  const [roles, setRoles] = useState<AIRole[]>(INITIAL_ROLES)
-  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(welcomeMessages)
-  const [spheres, setSpheres] = useState<KeySphereT[]>(seedSpheres)
+  const initialRef = useRef(loadRoomState(roomId))
+  const [roles, setRoles] = useState<AIRole[]>(() => initialRef.current?.roles ?? INITIAL_ROLES)
+  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(() => initialRef.current?.messages ?? welcomeMessages())
+  const [spheres, setSpheres] = useState<KeySphereT[]>(() => initialRef.current?.spheres ?? seedSpheres())
   const [bubbles, setBubbles] = useState<RelationBubble[]>([])
   const [merged, setMerged] = useState<Record<string, MergedPair>>({})
 
@@ -327,6 +329,15 @@ export function useDiscussion() {
     const iv = window.setInterval(check, MERGE_CHECK_MS)
     return () => window.clearInterval(iv)
   }, [interpretRelationLive, upsertBubble])
+
+  // 房间状态持久化：变更后 800ms 落盘，回到主页再进来讨论不丢
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      saveRoomState(roomId, { messages, spheres, roles })
+      touchProject(roomId)
+    }, 800)
+    return () => window.clearTimeout(t)
+  }, [messages, spheres, roles, roomId])
 
   return { mode, roles, messages, spheres, bubbles, merged, sendHuman, approveRole, moveSphere }
 }
