@@ -7,7 +7,7 @@ import { DiscussionPanel } from '@/components/DiscussionPanel'
 import { useDiscussion } from '@/hooks/useDiscussion'
 
 export default function Home() {
-  const { roles, messages, spheres, bubbles, merged, sendHuman, approveRole, moveSphere } = useDiscussion()
+  const { mode, roles, messages, spheres, bubbles, merged, sendHuman, approveRole, moveSphere } = useDiscussion()
   const [reduceMotion, setReduceMotion] = useState(false)
 
   return (
@@ -17,7 +17,9 @@ export default function Home() {
           <Orbit className="h-5 w-5 text-sky-400" />
           <div>
             <h1 className="text-sm leading-tight font-bold tracking-wide">KeySphere</h1>
-            <p className="text-[11px] leading-tight text-slate-500">多人 × 多 AI 协同讨论工作台 · 演示模式</p>
+            <p className="text-[11px] leading-tight text-slate-500">
+              多人 × 多 AI 协同讨论工作台 · {mode === 'live' ? 'Kimi 实时模式' : '演示模式（配置 VITE_MOONSHOT_API_KEY 接入真模型）'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
