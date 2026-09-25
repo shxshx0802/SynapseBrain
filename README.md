@@ -1,108 +1,73 @@
-# KeySphere · 多 AI × 多人协同讨论工作台
+# React + TypeScript + Vite
 
-> 一个「人 + 多 AI」围坐在同一块无限画布上办公的空间：
-> 文件拖进来，多个 AI 从多个方向展开讨论，讨论中自动凝结出**关键球（Key Sphere）**，
-> 人可以用手势和拖拽参与思考，也可以随时接管任何一个方向。
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
----
+Currently, two official plugins are available:
 
-## 一、项目愿景
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-传统群聊里 AI 是「排队发言的助手」。KeySphere 想让 AI 成为**围桌讨论的协作者**：
+## React Compiler
 
-- **多 AI 并行**：不同 AI 从不同方向（技术 / 商业 / 风险 / 用户 / 对立面……）同时展开，而不是串行排队。
-- **人在回路**：所有参与者（人 + AI）共享同一块画布，人可以随时插入任何一路讨论、拖动任何材料。
-- **可视化思考**：讨论中的关键概念自动凝结为「关键球」，球与球靠近时产生融球、震动、关系解读——**用物理直觉呈现概念之间的关系**。
-- **成本可控**：每个 AI 角色有独立的额度预算，超限自动降级或暂停，杜绝「一个话题烧光额度」。
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## 二、核心概念
+## Expanding the ESLint configuration
 
-### 2.1 关键球（Key Sphere）
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-讨论过程中由 AI 自动提炼的**概念节点**，是「精确的方向性表达」：
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-- 由 AI 在讨论中实时生成（例如「采用事件溯源架构」「竞品已卡位企业市场」）。
-- 参与者可以**拖动**关键球，把它推到某一路讨论里，或把两个球靠在一起。
-- 两个不同关键球靠近拼接时：
-  1. 视觉上出现**融球（Metaball）效果**；
-  2. 伴随**震动 / 脉冲动态 UI 反馈**（可在设置中关闭，照顾无障碍需求）；
-  3. AI 自动**说出并显示两个球的关系**（支持 / 矛盾 / 因果 / 类比 / 无关）。
-- 支持**手势控制**（触屏捏合缩放、拖拽多选；摄像头手势为可选项，见路线图）。
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-### 2.2 讨论房间（Room）
-
-一次协同办公的容器：
-
-- **参与者**：人类用户 + 若干 AI 角色。
-- **议题源**：拖入的文件（文档 / 表格 / 图片 / 链接）自动解析为讨论上下文。
-- **方向（Thread）**：每个 AI 认领一个方向并行讨论；人可以随时创建新方向或接管某个方向。
-
-### 2.3 额度管家（Quota Manager）
-
-- 每个 AI 角色独立计数 token / 调用次数 / 费用。
-- 预算档位：`frugal`（节俭）/ `standard`（标准）/ `deep`（深入），按方向重要度分配。
-- 接近上限时自动降档（换小模型、减少轮次）；触顶后该 AI 进入「待批准」状态，由人放行。
-
-## 三、功能全景
-
-| 模块 | 说明 | 状态 |
-| --- | --- | --- |
-| 无限画布 | 拖拽平移、缩放，文件与关键球自由摆放 | 规划中 |
-| 文件拖入 | 拖文件即成为议题上下文，自动摘要 | 规划中 |
-| 多 AI 并行讨论 | 按方向分工，消息流分栏展示 | 规划中 |
-| 关键球系统 | 自动生成、拖拽、融球、震动、关系解读 | 规划中 |
-| 额度管家 | 角色级预算、自动降档、人工放行 | 规划中 |
-| 手势控制 | 触屏手势必做；摄像头手势可选 | 规划中 |
-| 关系图谱 | 关键球之间的边自动沉淀为图谱 | 规划中 |
-
-## 四、技术路线（建议）
-
-- **前端**：React + TypeScript + Vite；画布用 Canvas/WebGL（融球效果建议 `glsl` metaball shader 或 2D 距离场）；手势用 Pointer Events（触屏/鼠标统一）。
-- **实时层**：WebSocket（服务端推送 AI 消息、关键球生成、关系解读）。
-- **AI 编排层**：Provider 抽象接口，支持 OpenAI / Anthropic / Moonshot 等；角色（Persona）+ 方向（Thread）+ 额度（Budget）三维配置。
-- **存储**：会话与文件元数据用 SQLite（本地优先）；文件内容入向量库（可选）。
-- **测试**：Vitest（单元）+ Playwright（画布交互 E2E）。
-
-## 五、目录结构（约定）
-
-```
-keysphere/
-├── README.md            # 本文件：项目是什么、为什么、怎么用
-├── AGENTS.md            # 给 AI 协作者的开发约定（改代码前必读）
-├── .env.example         # 环境变量样例（复制为 .env 后填值）
-├── docs/                # 设计与决策文档（ADR）
-├── src/
-│   ├── canvas/          # 画布、关键球渲染、融球 shader、手势
-│   ├── collab/          # 房间、参与者、消息流、WebSocket 客户端
-│   ├── ai/              # provider 抽象、角色 persona、讨论编排
-│   ├── quota/           # 额度计数、降档策略、人工放行
-│   └── shared/          # 类型定义、工具函数
-└── .github/             # issue 模板、CI
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-## 六、快速开始
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-```bash
-cp .env.example .env      # 填入你的 API Key
-npm install
-npm run dev               # 启动开发服务器
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-（脚手架落地后补充实际命令；详见 docs/ 下的设计文档。）
-
-## 七、设计红线
-
-1. **人永远可以接管**：任何 AI 方向都可被人类参与者随时接管或暂停。
-2. **成本透明**：界面上始终可见每个 AI 的实时额度消耗。
-3. **动效可关闭**：融球、震动等强反馈必须可在设置中关闭（无障碍）。
-4. **本地优先**：讨论数据默认留在本地，云端同步为可选项。
-
-## 八、路线图
-
-- **MVP**：单房间、文件拖入、2 个 AI 双方向讨论、关键球生成与融球交互。
-- **V0.2**：额度管家、关系图谱沉淀、触屏手势。
-- **V0.3**：摄像头手势、插件化 AI provider、多人实时协同（冲突合并）。
-
----
-
-*README 由人与 AI 共同维护；重大变更请先改 docs/ 下的 ADR，再回头更新本文件。*
