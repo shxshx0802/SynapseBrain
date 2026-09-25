@@ -63,9 +63,9 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
             const sy = s.y * v.k + v.y
             const r = s.r * v.k
             const pulse = s.pulseAt && !reduceMotion ? Math.max(0, 1 - (now - s.pulseAt) / 700) : 0
-            // 灰色球体
+            // 灰色球体：画小一圈（0.88r），让 HTML 球面盖住 goo 滤镜的模糊边缘，避免缩放时的重影
             ctx.beginPath()
-            ctx.arc(sx, sy, r * (1 + pulse * 0.12), 0, Math.PI * 2)
+            ctx.arc(sx, sy, r * 0.88 * (1 + pulse * 0.12), 0, Math.PI * 2)
             ctx.fillStyle = '#9aa3af'
             ctx.fill()
             // 阵阵白色光波：周期性从球心扩散的涟漪
