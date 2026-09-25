@@ -15,7 +15,13 @@ export default function Room() {
   const { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, layoutSpheres } = useDiscussion(id)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [inspectId, setInspectId] = useState<string | null>(null)
+  const [fitRequest, setFitRequest] = useState<{ halfW: number; halfH: number; nonce: number } | null>(null)
   const project = getProject(id)
+
+  const handleLayout = () => {
+    const bounds = layoutSpheres()
+    if (bounds) setFitRequest({ ...bounds, nonce: Date.now() })
+  }
 
   const inspectSphere = inspectId ? spheres.find((s) => s.id === inspectId) ?? null : null
   const inspectRole = inspectSphere ? roles.find((r) => r.id === inspectSphere.authorId) ?? null : null
@@ -51,7 +57,7 @@ export default function Room() {
             size="sm"
             variant="outline"
             className="h-8 gap-1.5 rounded-lg border-white/15 bg-black/50 text-xs hover:bg-white/10"
-            onClick={layoutSpheres}
+            onClick={handleLayout}
             title="按拼接关系自动整理球簇布局"
           >
             <LayoutGrid className="h-3.5 w-3.5" />
@@ -84,6 +90,7 @@ export default function Room() {
             roles={roles}
             reduceMotion={reduceMotion}
             enginePaused={enginePaused}
+            fitRequest={fitRequest}
             onMoveSphere={moveSphere}
             onAttachFile={attachDocument}
             onInspect={setInspectId}

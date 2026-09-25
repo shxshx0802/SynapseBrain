@@ -404,28 +404,46 @@ export function useDiscussion(roomId: string) {
       arr.push(s)
       clusters.set(r, arr)
     }
-    // 目标位置：簇按大小从左到右排，簇内大球在环心、其余环绕
+    // 目标位置：同心环形、层层递进——最大簇居圆心，其余簇按大小依次填入外圈各层，
+    // 层内容量随周长递增，相邻层错开半格；簇内大球在环心、其余环绕
+    const SLOT = 620 // 相邻簇最小间距（世界单位）
+    const RING_STEP = 640 // 层间距
+    const clustersDesc = Array.from(clusters.values()).sort((a, b) => b.length - a.length)
+    const n = clustersDesc.length
+    const slotCenters: Array<{ x: number; y: number }> = []
+    if (n > 0) slotCenters.push({ x: 0, y: 0 }) // 第 0 层：圆心
+    let ci = 1
+    let ring = 1
+    while (ci < n) {
+      const radius = ring * RING_STEP
+      const capacity = Math.max(1, Math.floor(((2 * Math.PI * radius) / SLOT) * 0.92))
+      const count = Math.min(capacity, n - ci)
+      // 相邻层错开半个间隔，视觉上层层递进而不是放射状对齐
+      const base = (ring % 2) * (Math.PI / count)
+      for (let k = 0; k < count; k++) {
+        const ang = (k / count) * Math.PI * 2 + base
+        slotCenters.push({ x: Math.cos(ang) * radius, y: Math.sin(ang) * radius * 0.88 })
+      }
+      ci += count
+      ring++
+    }
     const targets = new Map<string, { x: number; y: number }>()
-    let cursor = 0
-    for (const cl of Array.from(clusters.values()).sort((a, b) => b.length - a.length)) {
+    clustersDesc.forEach((cl, idx) => {
+      const center = slotCenters[idx]
       const maxR = Math.max(...cl.map((s) => s.r))
       if (cl.length === 1) {
-        targets.set(cl[0].id, { x: cursor + maxR, y: 0 })
-        cursor += maxR * 2 + 140
-      } else {
-        const ringR = Math.max(150, maxR * 2.2)
-        const sorted = [...cl].sort((a, b) => b.r - a.r)
-        targets.set(sorted[0].id, { x: cursor + ringR, y: 0 })
-        sorted.slice(1).forEach((s, i) => {
-          const ang = (i / (sorted.length - 1)) * Math.PI * 2 - Math.PI / 2
-          targets.set(s.id, { x: cursor + ringR + Math.cos(ang) * ringR, y: Math.sin(ang) * ringR * 0.82 })
-        })
-        cursor += ringR * 2 + maxR + 180
+        targets.set(cl[0].id, { ...center })
+        return
       }
-    }
-    // 整体水平居中
-    const shift = -cursor / 2
-    for (const t of targets.values()) t.x += shift
+      const sorted = [...cl].sort((a, b) => b.r - a.r)
+      // 卫星轨道半径：别超过相邻簇间距的一半，避免跨簇重叠
+      const ringR = Math.min(Math.max(150, maxR * 2.2), SLOT / 2 - 90)
+      targets.set(sorted[0].id, { ...center })
+      sorted.slice(1).forEach((s, i) => {
+        const ang = (i / (sorted.length - 1)) * Math.PI * 2 - Math.PI / 2
+        targets.set(s.id, { x: center.x + Math.cos(ang) * ringR, y: center.y + Math.sin(ang) * ringR * 0.86 })
+      })
+    })
     // 平滑补间（ease-out cubic）
     const from = new Map(sp.map((s) => [s.id, { x: s.x, y: s.y }]))
     const t0 = performance.now()
@@ -445,6 +463,16 @@ export function useDiscussion(roomId: string) {
       if (k >= 1) layoutBusyRef.current = false
     }
     layoutAnimRef.current = requestAnimationFrame(step)
+    // 布局包围盒（半宽/半高），调用方据此把视野自动缩放到整个环形
+    let halfW = 0
+    let halfH = 0
+    for (const s of sp) {
+      const tg = targets.get(s.id)
+      if (!tg) continue
+      halfW = Math.max(halfW, Math.abs(tg.x) + s.r)
+      halfH = Math.max(halfH, Math.abs(tg.y) + s.r)
+    }
+    return { halfW: halfW + 80, halfH: halfH + 80 }
   }, [merged])
 
   // 卸载时清理补间动画

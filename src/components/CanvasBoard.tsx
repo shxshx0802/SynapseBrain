@@ -16,12 +16,14 @@ interface Props {
   roles: AIRole[]
   reduceMotion: boolean
   enginePaused: boolean
+  /** 整理布局后的自动取景请求（半宽/半高 + nonce），画布据此缩放到能看见整个环形 */
+  fitRequest?: { halfW: number; halfH: number; nonce: number } | null
   onMoveSphere: (id: string, x: number, y: number) => void
   onAttachFile: (file: File) => void
   onInspect: (id: string) => void
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, onMoveSphere, onAttachFile, onInspect }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, onMoveSphere, onAttachFile, onInspect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fxCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -162,6 +164,18 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     return () => cancelAnimationFrame(raf)
   }, [reduceMotion])
 
+  /** 整理布局后自动取景：缩放平移到能看见整个环形布局 */
+  useEffect(() => {
+    if (!fitRequest) return
+    const container = containerRef.current
+    if (!container) return
+    const W = container.clientWidth
+    const H = container.clientHeight
+    if (!W || !H) return
+    const k = Math.min(2.5, Math.max(0.2, Math.min(W / (fitRequest.halfW * 2), H / (fitRequest.halfH * 2)) * 0.92))
+    setView({ k, x: W / 2, y: H / 2 })
+  }, [fitRequest])
+
   /** 滚轮缩放（需 passive: false 才能 preventDefault） */
   useEffect(() => {
     const el = containerRef.current
@@ -173,7 +187,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       const my = e.clientY - rect.top
       setView((v) => {
         const factor = Math.exp(-e.deltaY * 0.0012)
-        const k2 = Math.min(2.5, Math.max(0.35, v.k * factor))
+        const k2 = Math.min(2.5, Math.max(0.2, v.k * factor))
         const wx = (mx - v.x) / v.k
         const wy = (my - v.y) / v.k
         return { k: k2, x: mx - wx * k2, y: my - wy * k2 }
@@ -236,7 +250,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       const d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
       const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
       const { d0, k0, mid0, v0 } = pinchRef.current
-      const k2 = Math.min(2.5, Math.max(0.35, (k0 * d) / Math.max(d0, 1)))
+      const k2 = Math.min(2.5, Math.max(0.2, (k0 * d) / Math.max(d0, 1)))
       const anchor = toWorld(mid0.x, mid0.y, v0)
       setView({ k: k2, x: mid.x - anchor.x * k2, y: mid.y - anchor.y * k2 })
       return
