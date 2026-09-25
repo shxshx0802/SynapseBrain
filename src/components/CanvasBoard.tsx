@@ -24,6 +24,7 @@ interface Props {
 export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, onMoveSphere, onAttachFile, onInspect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fxCanvasRef = useRef<HTMLCanvasElement>(null)
   const [view, setView] = useState<View>({ x: 480, y: 320, k: 1 })
   const [dragOver, setDragOver] = useState(false)
 
@@ -40,13 +41,15 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
   const tapRef = useRef<{ id: string; t: number; x: number; y: number; moved: boolean } | null>(null)
   const lastTapRef = useRef<{ id: string; t: number } | null>(null)
 
-  /** 融球渲染层：rAF 持续绘制，SVG goo 滤镜让靠近的球产生流体融合 */
+  /** 融球渲染层：rAF 持续绘制。分两层——gooCanvas 带 SVG 滤镜画球体/桥接（流体融合），
+      fxCanvas 不带滤镜画光波/脉冲（goo 滤镜会把细线的 alpha 二值化滤掉，光波必须画在滤镜外） */
   useEffect(() => {
     let raf = 0
     const draw = () => {
       const canvas = canvasRef.current
+      const fxCanvas = fxCanvasRef.current
       const container = containerRef.current
-      if (canvas && container) {
+      if (canvas && fxCanvas && container) {
         const dpr = window.devicePixelRatio || 1
         const W = container.clientWidth
         const H = container.clientHeight
@@ -54,10 +57,17 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
           canvas.width = Math.round(W * dpr)
           canvas.height = Math.round(H * dpr)
         }
+        if (fxCanvas.width !== canvas.width || fxCanvas.height !== canvas.height) {
+          fxCanvas.width = canvas.width
+          fxCanvas.height = canvas.height
+        }
         const ctx = canvas.getContext('2d')
-        if (ctx) {
+        const fx = fxCanvas.getContext('2d')
+        if (ctx && fx) {
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
           ctx.clearRect(0, 0, W, H)
+          fx.setTransform(dpr, 0, 0, dpr, 0, 0)
+          fx.clearRect(0, 0, W, H)
           const v = viewRef.current
           const { spheres: sp, merged: mg } = drawStateRef.current
           const now = performance.now()
@@ -87,28 +97,27 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
               const period = boost ? 1300 : 2400 + (s.bornAt % 800)
               const ripple = (offset: number, alpha: number, width: number) => {
                 const phase = ((now + s.bornAt + offset) % period) / period
-                // 波带：内圈亮边 + 外圈渐隐，比单细线肉眼可见得多
                 const rr = r * (1.08 + phase * 1.9)
-                ctx.beginPath()
-                ctx.arc(sx, sy, rr, 0, Math.PI * 2)
-                ctx.strokeStyle = '#ffffff'
-                ctx.lineWidth = width
-                ctx.globalAlpha = (1 - phase) * alpha
-                ctx.stroke()
-                ctx.globalAlpha = 1
+                fx.beginPath()
+                fx.arc(sx, sy, rr, 0, Math.PI * 2)
+                fx.strokeStyle = '#ffffff'
+                fx.lineWidth = width
+                fx.globalAlpha = (1 - phase) * alpha
+                fx.stroke()
+                fx.globalAlpha = 1
               }
               ripple(0, boost ? 0.65 : 0.5, boost ? 2.5 : 2)
               ripple(period / 2, boost ? 0.45 : 0.32, boost ? 2 : 1.5)
             }
             // 拼接触发时的强脉冲光环
             if (pulse > 0) {
-              ctx.beginPath()
-              ctx.arc(sx, sy, r * (1.4 + (1 - pulse) * 1.8), 0, Math.PI * 2)
-              ctx.strokeStyle = '#ffffff'
-              ctx.lineWidth = 2.5
-              ctx.globalAlpha = pulse * 0.9
-              ctx.stroke()
-              ctx.globalAlpha = 1
+              fx.beginPath()
+              fx.arc(sx, sy, r * (1.4 + (1 - pulse) * 1.8), 0, Math.PI * 2)
+              fx.strokeStyle = '#ffffff'
+              fx.lineWidth = 2.5
+              fx.globalAlpha = pulse * 0.9
+              fx.stroke()
+              fx.globalAlpha = 1
             }
           }
 
@@ -136,13 +145,13 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
             ctx.globalAlpha = 1
             // 减少动态效果时：用静态光环标示拼接关系，替代震动与脉冲
             if (reduceMotion) {
-              ctx.beginPath()
-              ctx.arc(mx, my, br + 14, 0, Math.PI * 2)
-              ctx.strokeStyle = '#ffffff'
-              ctx.lineWidth = 2
-              ctx.globalAlpha = 0.5
-              ctx.stroke()
-              ctx.globalAlpha = 1
+              fx.beginPath()
+              fx.arc(mx, my, br + 14, 0, Math.PI * 2)
+              fx.strokeStyle = '#ffffff'
+              fx.lineWidth = 2
+              fx.globalAlpha = 0.5
+              fx.stroke()
+              fx.globalAlpha = 1
             }
           }
         }
@@ -318,6 +327,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       </svg>
 
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" style={{ filter: 'url(#goo)' }} />
+      <canvas ref={fxCanvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
       {spheres.map((s) => (
         <SphereNode
