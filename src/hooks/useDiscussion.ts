@@ -9,6 +9,7 @@ import {
   INITIAL_ROLES,
   MESSAGE_POOLS,
   RELATION_TEMPLATES,
+  SPHERE_CONTENT_POOLS,
   SPHERE_LABEL_POOLS,
   WELCOME,
   makeId,
@@ -43,6 +44,7 @@ function seedSpheres(): KeySphereT[] {
     y: seeds[i][1],
     r: seeds[i][2],
     label: SPHERE_LABEL_POOLS[r.id][0],
+    content: SPHERE_CONTENT_POOLS[r.id][0],
     color: r.color,
     authorId: r.id,
     bornAt: Date.now(),
@@ -57,6 +59,7 @@ export function useDiscussion(roomId: string) {
   const [spheres, setSpheres] = useState<KeySphereT[]>(() => initialRef.current?.spheres ?? seedSpheres())
   const [bubbles, setBubbles] = useState<RelationBubble[]>([])
   const [merged, setMerged] = useState<Record<string, MergedPair>>({})
+  const [enginePaused, setEnginePaused] = useState<boolean>(() => initialRef.current?.enginePaused ?? false)
 
   const providerRef = useRef<ChatProvider | null>(null)
   if (providerRef.current === null && mode === 'live') providerRef.current = createDefaultProvider()
@@ -72,6 +75,8 @@ export function useDiscussion(roomId: string) {
   const poolIndexRef = useRef<Record<string, number>>({})
   const inflightRef = useRef(0)
   const lastVibrateRef = useRef(0)
+  const enginePausedRef = useRef(enginePaused)
+  enginePausedRef.current = enginePaused
 
   const pushMessage = useCallback((roleId: string, text: string) => {
     setMessages((prev) => {
@@ -108,11 +113,12 @@ export function useDiscussion(roomId: string) {
     [pushMessage],
   )
 
-  const addSphere = useCallback((role: AIRole, label: string) => {
+  const addSphere = useCallback((role: AIRole, label: string, content?: string) => {
     setSpheres((prev) => {
       if (prev.length >= MAX_SPHERES) return prev
       const r = 56 + Math.random() * 22
-      // 确定性摆放：优先落在同作者的球簇旁边，其次落入该作者的专属泳道；避开已有球
+      // 出生点：同作者球簇中心（首球为专属泳道），黄金角螺旋向外搜索
+      // ——完全确定性，且保证不与任何现有球重叠
       const mine = prev.filter((s) => s.authorId === role.id)
       const laneIdx = Math.max(0, INITIAL_ROLES.findIndex((x) => x.id === role.id))
       const base = mine.length
@@ -121,35 +127,38 @@ export function useDiscussion(roomId: string) {
             y: mine.reduce((a, s) => a + s.y, 0) / mine.length,
           }
         : { x: -380 + laneIdx * 380, y: -240 }
-      let pos = base
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const angle = Math.random() * Math.PI * 2
-        const dist = (mine.length ? 130 : 0) + r + 40 + Math.random() * 50
+      const clear = (x: number, y: number) => prev.every((s) => Math.hypot(s.x - x, s.y - y) > (s.r + r) * 1.12)
+      let pos: { x: number; y: number } | null = null
+      for (let n = 0; n < 360; n++) {
+        const angle = n * 2.399963 // 黄金角
+        const dist = 10 * Math.sqrt(n) + r
         const x = base.x + Math.cos(angle) * dist
-        const y = base.y + Math.sin(angle) * dist * 0.7
-        if (prev.every((s) => Math.hypot(s.x - x, s.y - y) > (s.r + r) * 1.05)) {
+        const y = base.y + Math.sin(angle) * dist * 0.78
+        if (clear(x, y)) {
           pos = { x, y }
           break
         }
       }
+      if (!pos) pos = { x: base.x, y: base.y - 400 } // 画布已极满时的兜底，理论上到不了
       return [
         ...prev,
-        { id: makeId(), x: pos.x, y: pos.y, r, label, color: role.color, authorId: role.id, bornAt: Date.now() },
+        { id: makeId(), x: pos.x, y: pos.y, r, label, content, color: role.color, authorId: role.id, bornAt: Date.now() },
       ]
     })
   }, [])
 
-  /** 演示模式：从预设标签池凝结关键球 */
+  /** 演示模式：从预设标签池凝结关键球（附来源内容） */
   const spawnSphereMock = useCallback(
     (role: AIRole) => {
       const idx = (poolIndexRef.current[role.id] = (poolIndexRef.current[role.id] ?? 0) + 1)
       const pool = SPHERE_LABEL_POOLS[role.id]
-      addSphere(role, pool[idx % pool.length])
+      const contentPool = SPHERE_CONTENT_POOLS[role.id]
+      addSphere(role, pool[idx % pool.length], contentPool[idx % contentPool.length])
     },
     [addSphere],
   )
 
-  /** 实时模式：让模型把自己的观点浓缩成关键球标签 */
+  /** 实时模式：让模型把自己的观点浓缩成关键球标签，原文随球保存 */
   const spawnSphereLive = useCallback(
     async (role: AIRole, text: string, provider: ChatProvider) => {
       try {
@@ -161,7 +170,7 @@ export function useDiscussion(roomId: string) {
           { maxTokens: 512 },
         )
         const label = res.text.replace(/[「」"'“”'、，。,.：:；;\n\s]/g, '').slice(0, 12)
-        if (label.length >= 2) addSphere(role, label)
+        if (label.length >= 2) addSphere(role, label, text)
         chargeRole(role.id, res.tokens)
       } catch {
         /* 标签生成失败不影响讨论，静默忽略 */
@@ -232,9 +241,11 @@ export function useDiscussion(roomId: string) {
     [chargeRole, pushMessage, recentContext, replaceMessage, spawnSphereLive, spawnSphereMock],
   )
 
-  // 引擎主循环：驱动多 AI 并行讨论
+  // 引擎主循环：驱动多 AI 并行讨论（暂停时保持静默，插话仍可手动触发回应）
   useEffect(() => {
-    const iv = window.setInterval(() => postAI(), TICK_MS)
+    const iv = window.setInterval(() => {
+      if (!enginePausedRef.current) postAI()
+    }, TICK_MS)
     return () => window.clearInterval(iv)
   }, [postAI])
 
@@ -433,11 +444,13 @@ export function useDiscussion(roomId: string) {
   // 房间状态持久化：变更后 800ms 落盘，回到主页再进来讨论不丢
   useEffect(() => {
     const t = window.setTimeout(() => {
-      saveRoomState(roomId, { messages, spheres, roles })
+      saveRoomState(roomId, { messages, spheres, roles, enginePaused })
       touchProject(roomId)
     }, 800)
     return () => window.clearTimeout(t)
-  }, [messages, spheres, roles, roomId])
+  }, [messages, spheres, roles, enginePaused, roomId])
 
-  return { mode, roles, messages, spheres, bubbles, merged, sendHuman, attachDocument, approveRole, moveSphere }
+  const toggleEngine = useCallback(() => setEnginePaused((p) => !p), [])
+
+  return { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere }
 }

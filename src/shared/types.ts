@@ -30,6 +30,8 @@ export interface KeySphereT {
   color: string
   authorId: string
   bornAt: number
+  /** 这颗球凝结自哪段讨论内容（双击查看） */
+  content?: string
   /** 最近一次被拼接触发的时间戳，用于脉冲动画 */
   pulseAt?: number
 }

@@ -15,11 +15,13 @@ interface Props {
   merged: Record<string, MergedPair>
   roles: AIRole[]
   reduceMotion: boolean
+  enginePaused: boolean
   onMoveSphere: (id: string, x: number, y: number) => void
   onAttachFile: (file: File) => void
+  onInspect: (id: string) => void
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onMoveSphere, onAttachFile }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, onMoveSphere, onAttachFile, onInspect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [view, setView] = useState<View>({ x: 480, y: 320, k: 1 })
@@ -260,6 +262,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
           shaking={shakingIds.has(s.id)}
           reduceMotion={reduceMotion}
           onPointerDown={onSpherePointerDown}
+          onInspect={onInspect}
         />
       ))}
 
@@ -287,8 +290,14 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, onM
         </div>
       )}
 
+      {enginePaused && (
+        <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-black/70 px-4 py-1.5 text-xs text-slate-300 backdrop-blur">
+          讨论已暂停 · 插话仍可触发回应
+        </div>
+      )}
+
       <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/70 px-4 py-1.5 text-xs text-slate-500 backdrop-blur">
-        拖文件进画布，AI 立刻阅读讨论 · 拖动空白平移 · 滚轮 / 双指缩放 · 两球相碰有惊喜
+        拖文件进画布，AI 立刻阅读讨论 · 拖动空白平移 · 滚轮 / 双指缩放 · 双击球看内含 · 两球相碰有惊喜
       </div>
     </div>
   )

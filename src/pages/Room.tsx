@@ -1,18 +1,27 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowLeft, Orbit } from 'lucide-react'
+import { ArrowLeft, Orbit, Pause, Play } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CanvasBoard } from '@/components/CanvasBoard'
 import { DiscussionPanel } from '@/components/DiscussionPanel'
+import { SphereDetail } from '@/components/SphereDetail'
 import { useDiscussion } from '@/hooks/useDiscussion'
 import { getProject } from '@/shared/storage'
 
 export default function Room() {
   const { id = '' } = useParams()
-  const { mode, roles, messages, spheres, bubbles, merged, sendHuman, attachDocument, approveRole, moveSphere } = useDiscussion(id)
+  const { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere } = useDiscussion(id)
   const [reduceMotion, setReduceMotion] = useState(false)
+  const [inspectId, setInspectId] = useState<string | null>(null)
   const project = getProject(id)
+
+  const inspectSphere = inspectId ? spheres.find((s) => s.id === inspectId) ?? null : null
+  const inspectRole = inspectSphere ? roles.find((r) => r.id === inspectSphere.authorId) ?? null : null
+  const inspectThread = inspectSphere
+    ? (messages[inspectSphere.authorId] ?? []).filter((m) => m.text !== '…').slice(-8)
+    : []
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-black text-slate-100">
@@ -38,6 +47,16 @@ export default function Room() {
         </div>
         <div className="flex items-center gap-2">
           <span className="mr-1 text-[11px] text-slate-500">{roles.filter((r) => !r.paused).length + 1} 位参与者在线</span>
+          <Button
+            size="sm"
+            variant={enginePaused ? 'default' : 'outline'}
+            className="h-8 gap-1.5 rounded-lg border-white/15 bg-black/50 text-xs hover:bg-white/10"
+            onClick={toggleEngine}
+            title={enginePaused ? '继续讨论' : '暂停讨论'}
+          >
+            {enginePaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            {enginePaused ? '继续讨论' : '暂停'}
+          </Button>
           <Label htmlFor="reduce-motion" className="text-xs text-slate-400">
             减少动态效果
           </Label>
@@ -47,15 +66,28 @@ export default function Room() {
 
       <div className="flex min-h-0 flex-1">
         <DiscussionPanel roles={roles} messages={messages} onApprove={approveRole} onSend={sendHuman} />
-        <CanvasBoard
-          spheres={spheres}
-          bubbles={bubbles}
-          merged={merged}
-          roles={roles}
-          reduceMotion={reduceMotion}
-          onMoveSphere={moveSphere}
-          onAttachFile={attachDocument}
-        />
+        <div className="relative flex min-w-0 flex-1">
+          <CanvasBoard
+            spheres={spheres}
+            bubbles={bubbles}
+            merged={merged}
+            roles={roles}
+            reduceMotion={reduceMotion}
+            enginePaused={enginePaused}
+            onMoveSphere={moveSphere}
+            onAttachFile={attachDocument}
+            onInspect={setInspectId}
+          />
+          {inspectSphere && (
+            <SphereDetail
+              sphere={inspectSphere}
+              authorName={inspectRole?.name ?? 'AI'}
+              authorColor={inspectRole?.color ?? '#e2e8f0'}
+              thread={inspectThread}
+              onClose={() => setInspectId(null)}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

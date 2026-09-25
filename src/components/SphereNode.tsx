@@ -6,15 +6,20 @@ interface Props {
   shaking: boolean
   reduceMotion: boolean
   onPointerDown: (e: React.PointerEvent, id: string) => void
+  onInspect: (id: string) => void
 }
 
-export function SphereNode({ sphere: s, view: v, shaking, reduceMotion, onPointerDown }: Props) {
+export function SphereNode({ sphere: s, view: v, shaking, reduceMotion, onPointerDown, onInspect }: Props) {
   const sx = s.x * v.k + v.x
   const sy = s.y * v.k + v.y
   return (
     <div
       data-sphere="true"
       onPointerDown={(e) => onPointerDown(e, s.id)}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        onInspect(s.id)
+      }}
       className="absolute left-0 top-0 flex cursor-grab items-center justify-center rounded-full select-none active:cursor-grabbing"
       style={{
         width: s.r * 2,

@@ -13,6 +13,8 @@ export interface RoomState {
   messages: Record<string, ChatMessage[]>
   spheres: KeySphereT[]
   roles: AIRole[]
+  /** 讨论引擎是否暂停（AI 不再自动发言） */
+  enginePaused?: boolean
   savedAt: number
 }
 
