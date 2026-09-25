@@ -101,6 +101,11 @@ export default function GestureLab() {
     right: [],
   })
   const lastZoomPulseRef = useRef(0)
+  const lastZoomDirRef = useRef<'in' | 'out' | null>(null)
+  /** 光标平滑：指数滑动平均的当前位置 */
+  const cursorPosRef = useRef<{ x: number; y: number } | null>(null)
+  /** 连续推理错误计数，超过阈值自动重启推理循环 */
+  const errCountRef = useRef(0)
   const modeOffAtRef = useRef(0)
   const voiceActiveRef = useRef(false)
   const voiceDeadlineRef = useRef(0)
@@ -130,10 +135,12 @@ export default function GestureLab() {
     setLog((prev) => [{ t: new Date().toLocaleTimeString(), text }, ...prev].slice(0, 60))
   }, [])
 
-  /** 提示音（唤醒 / 抓取反馈） */
+  /** 提示音（唤醒 / 抓取反馈），复用同一个 AudioContext */
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const beep = useCallback((freq = 880, dur = 0.12) => {
     try {
-      const ctx = new AudioContext()
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      const ctx = audioCtxRef.current
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.frequency.value = freq
@@ -141,7 +148,6 @@ export default function GestureLab() {
       osc.connect(gain).connect(ctx.destination)
       osc.start()
       osc.stop(ctx.currentTime + dur)
-      osc.onended = () => ctx.close()
     } catch {
       /* 音频不可用则静默 */
     }
@@ -222,8 +228,20 @@ export default function GestureLab() {
         const lm = landmarkerRef.current
         if (!v || !lm || v.readyState < 2 || v.currentTime === lastVideoTimeRef.current) return
         lastVideoTimeRef.current = v.currentTime
-        const res = lm.detectForVideo(v, performance.now())
-        handleHands(res.landmarks, res.handedness)
+        try {
+          const res = lm.detectForVideo(v, performance.now())
+          errCountRef.current = 0
+          handleHands(res.landmarks, res.handedness)
+        } catch (err) {
+          // 推理异常不能让 rAF 循环死掉，连续失败则终止并提示
+          errCountRef.current++
+          if (errCountRef.current > 30) {
+            cancelAnimationFrame(rafRef.current)
+            setCamStatus('error')
+            setCamError('手势推理连续失败，请刷新页面重试')
+            addLog(`❌ 手势推理异常：${err instanceof Error ? err.message : err}`)
+          }
+        }
       }
       rafRef.current = requestAnimationFrame(loop)
     } catch (err) {
@@ -254,15 +272,32 @@ export default function GestureLab() {
     })
 
     // 光标跟随食指指尖（优先右手，其次左手）
+    // 平滑处理：指数滑动平均 + 死区，避免识别噪声导致光标左右摇晃
     const tip = tips.right ?? tips.left
     const cursor = cursorRef.current
     if (tip && cursor) {
-      const cx = (mirrorRef.current ? 1 - tip.x : tip.x) * window.innerWidth
-      const cy = tip.y * window.innerHeight
-      cursor.style.transform = `translate(${cx - 16}px, ${cy - 16}px) scale(${grabRef.current ? 0.8 : 1})`
+      const rawX = (mirrorRef.current ? 1 - tip.x : tip.x) * window.innerWidth
+      const rawY = tip.y * window.innerHeight
+      const prev = cursorPosRef.current
+      let cx = rawX
+      let cy = rawY
+      if (prev) {
+        cx = prev.x + (rawX - prev.x) * 0.32
+        cy = prev.y + (rawY - prev.y) * 0.32
+        // 死区： smoothed 位移 <1.5px 视为静止，不更新 DOM
+        if (Math.hypot(cx - prev.x, cy - prev.y) < 1.5) {
+          cx = prev.x
+          cy = prev.y
+        }
+      }
+      const moved = !prev || cx !== prev.x || cy !== prev.y
+      cursorPosRef.current = { x: cx, y: cy }
+      if (moved) {
+        cursor.style.transform = `translate(${cx - 16}px, ${cy - 16}px) scale(${grabRef.current ? 0.8 : 1})`
+        cursor.dataset.x = String(cx)
+        cursor.dataset.y = String(cy)
+      }
       cursor.style.opacity = '1'
-      cursor.dataset.x = String(cx)
-      cursor.dataset.y = String(cy)
       if (!cursorVisible) setCursorVisible(true)
 
       const inMode = gestureModeRef.current
@@ -300,6 +335,7 @@ export default function GestureLab() {
       lastFistRef.current = { left: leftFist, right: rightFist }
     } else if (cursor) {
       cursor.style.opacity = '0'
+      cursorPosRef.current = null
       if (cursorVisible) setCursorVisible(false)
       lastFistRef.current = { left: false, right: false }
     }
@@ -328,11 +364,15 @@ export default function GestureLab() {
     // 摆动缩放：左手摆动放大 / 右手摆动缩小
     if (gestureModeRef.current) {
       const dir = tracks.left.swinging && tracks.left.gesture !== 'fist' ? 'in' : tracks.right.swinging && tracks.right.gesture !== 'fist' ? 'out' : null
-      if (dir && now - lastZoomPulseRef.current > 150) {
+      if (dir && now - lastZoomPulseRef.current > 200) {
         lastZoomPulseRef.current = now
         setZoomLevel((z) => Math.min(3, Math.max(0.5, z + (dir === 'in' ? 0.08 : -0.08))))
-        setZoomDir(dir)
-      } else if (!dir) {
+        if (lastZoomDirRef.current !== dir) {
+          lastZoomDirRef.current = dir
+          setZoomDir(dir)
+        }
+      } else if (!dir && lastZoomDirRef.current !== null) {
+        lastZoomDirRef.current = null
         setZoomDir(null)
       }
     }
