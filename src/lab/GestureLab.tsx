@@ -106,6 +106,8 @@ export default function GestureLab() {
   const cursorPosRef = useRef<{ x: number; y: number } | null>(null)
   /** 连续推理错误计数，超过阈值自动重启推理循环 */
   const errCountRef = useRef(0)
+  /** 语音识别连续失败次数 */
+  const voiceFailsRef = useRef(0)
   const modeOffAtRef = useRef(0)
   const voiceActiveRef = useRef(false)
   const voiceDeadlineRef = useRef(0)
@@ -165,7 +167,7 @@ export default function GestureLab() {
     if (hist.length < 4) return false
     let travel = 0
     for (let i = 1; i < hist.length; i++) travel += Math.abs(hist[i].x - hist[i - 1].x)
-    return travel > 0.35
+    return travel > 0.25
   }
 
   /** 在光标处向目标元素派发合成指针事件（供抓取/双击使用） */
@@ -457,6 +459,7 @@ export default function GestureLab() {
     rec.interimResults = true
 
     rec.onresult = (e) => {
+      voiceFailsRef.current = 0
       let finalText = ''
       let interimText = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -493,18 +496,31 @@ export default function GestureLab() {
     }
     rec.onerror = (e) => {
       setVoiceError(e.error)
+      voiceFailsRef.current++
       addLog(`⚠️ 语音识别错误：${e.error}`)
+      // 权限被拒或服务不可用时不再自动重试，避免重启自旋卡死页面
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || voiceFailsRef.current > 5) {
+        recRef.current = null
+      }
     }
     rec.onend = () => {
       setVoiceListening(false)
-      // 连续模式被系统打断时自动重启，保持常听
+      // 连续模式被系统打断时自动重启，保持常听；带退避，失败过多则放弃
       if (recRef.current === rec) {
-        try {
-          rec.start()
-          setVoiceListening(true)
-        } catch {
-          /* 重复 start 会抛错，忽略 */
+        if (voiceFailsRef.current > 5) {
+          addLog('🎙️ 语音连续失败，已停止自动重试（可点击「启动语音」再试）')
+          recRef.current = null
+          return
         }
+        window.setTimeout(() => {
+          if (recRef.current !== rec) return
+          try {
+            rec.start()
+            setVoiceListening(true)
+          } catch {
+            /* 重复 start 会抛错，忽略 */
+          }
+        }, 800)
       }
     }
     try {
@@ -545,6 +561,18 @@ export default function GestureLab() {
     },
     [],
   )
+
+  /** 全局错误捕获：任何未处理异常都写进日志，方便定位崩溃原因 */
+  useEffect(() => {
+    const onErr = (e: ErrorEvent) => addLog(`💥 页面错误：${e.message} @ ${e.filename}:${e.lineno}`)
+    const onRej = (e: PromiseRejectionEvent) => addLog(`💥 未处理异常：${String(e.reason).slice(0, 200)}`)
+    window.addEventListener('error', onErr)
+    window.addEventListener('unhandledrejection', onRej)
+    return () => {
+      window.removeEventListener('error', onErr)
+      window.removeEventListener('unhandledrejection', onRej)
+    }
+  }, [addLog])
 
   /** 测试球的指针交互（与真实讨论室一致的 drag + 双击打开） */
   const onSphereDown = (e: React.PointerEvent, id: string) => {
