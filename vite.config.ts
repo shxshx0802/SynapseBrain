@@ -9,6 +9,14 @@ export default defineConfig({
   plugins: [inspectAttr(), react()],
   server: {
     port: 7100,
+    proxy: {
+      // 浏览器直连 agent-gw.kimi.com 会被 CORS 拦截，走 dev server 代理转发
+      '/ai-gw': {
+        target: 'https://agent-gw.kimi.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/ai-gw/, '/coding'),
+      },
+    },
   },
   resolve: {
     alias: {

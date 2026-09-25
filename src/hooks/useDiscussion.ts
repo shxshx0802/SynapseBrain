@@ -144,7 +144,7 @@ export function useDiscussion(roomId: string) {
             { role: 'system', content: '把给定观点浓缩成一个关键概念短语：不超过 10 个汉字、名词性、无标点。只输出短语本身。' },
             { role: 'user', content: text },
           ],
-          { temperature: 0.3, maxTokens: 24 },
+          { maxTokens: 512 },
         )
         const label = res.text.replace(/[「」"'“”'、，。,.：:；;\n\s]/g, '').slice(0, 12)
         if (label.length >= 2) addSphere(role, label)
@@ -198,7 +198,7 @@ export function useDiscussion(roomId: string) {
             ...recentContext(),
           ]
           if (replyTo) msgs.push({ role: 'user', content: `人类参与者刚说：「${replyTo}」。请直接回应他/她，承接上下文。` })
-          const res = await provider.chat(msgs, { temperature: 0.8, maxTokens: role.downshifted ? 160 : 360 })
+          const res = await provider.chat(msgs, { maxTokens: role.downshifted ? 400 : 800 })
           replaceMessage(role.id, tmpId, res.text)
           chargeRole(role.id, res.tokens)
           if (Math.random() < 0.35) void spawnSphereLive(role, res.text, provider)
@@ -262,7 +262,7 @@ export function useDiscussion(roomId: string) {
               },
               { role: 'user', content: `球A：「${a.label}」；球B：「${b.label}」。它们之间是什么关系？` },
             ],
-            { temperature: 0.5, maxTokens: 140 },
+            { maxTokens: 800 },
           )
           const cleaned = res.text.replace(/```json|```/g, '').trim()
           const parsed = JSON.parse(cleaned) as { type?: string; text?: string }

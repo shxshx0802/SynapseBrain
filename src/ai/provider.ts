@@ -33,7 +33,9 @@ function createMoonshotProvider(): ChatProvider {
         body: JSON.stringify({
           model: config.moonshotModel,
           messages,
-          temperature: opts?.temperature ?? 0.7,
+          // 部分网关模型（如 agent-gw 的 k2d8-preview）只允许 temperature=1：
+          // 不传则交给服务端默认值，避免 400
+          ...(opts?.temperature != null ? { temperature: opts.temperature } : {}),
           max_tokens: opts?.maxTokens ?? 400,
         }),
       })
