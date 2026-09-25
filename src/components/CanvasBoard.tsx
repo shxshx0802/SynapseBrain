@@ -80,9 +80,11 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
             ctx.arc(sx, sy, r * 0.88 * (1 + pulse * 0.12), 0, Math.PI * 2)
             ctx.fillStyle = '#9aa3af'
             ctx.fill()
-            // 阵阵白色光波：周期性从球心扩散的涟漪；拼接中的球加倍（两条错峰涟漪、更亮更快）
-            if (!reduceMotion) {
-              const period = inMerge ? 1300 : 2400 + (s.bornAt % 800)
+            // 阵阵白色光波：待机时常在的柔和涟漪（不受减少动态效果影响）；
+            // 拼接中的球加倍（两条错峰涟漪、更亮更快）——这部分强烈反馈仍遵守开关
+            {
+              const boost = inMerge && !reduceMotion
+              const period = boost ? 1300 : 2400 + (s.bornAt % 800)
               const ripple = (offset: number, alpha: number) => {
                 const phase = ((now + s.bornAt + offset) % period) / period
                 ctx.beginPath()
@@ -93,8 +95,8 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
                 ctx.stroke()
                 ctx.globalAlpha = 1
               }
-              ripple(0, inMerge ? 0.55 : 0.3)
-              if (inMerge) ripple(period / 2, 0.4)
+              ripple(0, boost ? 0.55 : 0.3)
+              if (boost) ripple(period / 2, 0.4)
             }
             // 拼接触发时的强脉冲光环
             if (pulse > 0) {
