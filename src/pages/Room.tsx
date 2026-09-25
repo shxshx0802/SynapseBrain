@@ -23,11 +23,15 @@ export default function Room() {
           </Link>
           <Orbit className="h-5 w-5 shrink-0 text-slate-300" />
           <div className="min-w-0">
-            <h1 className="truncate text-sm leading-tight font-bold tracking-wide">
-              {project?.name ?? '讨论房间'}
-              <span className="ml-2 font-normal text-slate-500">{project?.topic}</span>
+            <h1 className="flex items-center gap-2 text-sm leading-tight font-bold tracking-wide">
+              <span className="truncate">{project?.name ?? '讨论房间'}</span>
+              {project?.topic && (
+                <span className="shrink-0 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[11px] font-normal text-slate-300">
+                  议题 · {project.topic}
+                </span>
+              )}
             </h1>
-            <p className="text-[11px] leading-tight text-slate-500">
+            <p className="mt-0.5 text-[11px] leading-tight text-slate-500">
               {mode === 'live' ? 'Kimi 实时模式' : '演示模式（配置 VITE_MOONSHOT_API_KEY 接入真模型）'}
             </p>
           </div>

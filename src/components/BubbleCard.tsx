@@ -20,7 +20,7 @@ interface Props {
 export function BubbleCard({ bubble, sx, sy, authorName, authorColor }: Props) {
   const tone = TONE[bubble.type]
   return (
-    <div className="pointer-events-none absolute z-20" style={{ left: sx, top: sy, transform: 'translate(-50%, -100%)' }}>
+    <div className="ks-fade-up pointer-events-none absolute z-20" style={{ left: sx, top: sy, transform: 'translate(-50%, -100%)' }}>
       <div className="w-72 rounded-xl border border-white/15 bg-slate-900/92 p-3 shadow-2xl backdrop-blur-md">
         <div className="mb-1.5 flex items-center gap-2">
           <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: tone.bg, color: tone.fg }}>

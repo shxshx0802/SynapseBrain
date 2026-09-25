@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AIRole, ChatMessage, KeySphereT, MergedPair, RelationBubble, RelationType } from '@/shared/types'
 import { isLiveMode } from '@/shared/config'
-import { loadRoomState, saveRoomState, touchProject } from '@/shared/storage'
+import { getProject, loadRoomState, saveRoomState, touchProject } from '@/shared/storage'
 import { createDefaultProvider, type ChatProvider, type ProviderMessage } from '@/ai/provider'
 import {
   HUMAN_ID,
@@ -59,6 +59,7 @@ export function useDiscussion(roomId: string) {
 
   const providerRef = useRef<ChatProvider | null>(null)
   if (providerRef.current === null && mode === 'live') providerRef.current = createDefaultProvider()
+  const topicRef = useRef(getProject(roomId)?.topic ?? '')
 
   const rolesRef = useRef(roles)
   rolesRef.current = roles
@@ -109,18 +110,30 @@ export function useDiscussion(roomId: string) {
   const addSphere = useCallback((role: AIRole, label: string) => {
     setSpheres((prev) => {
       if (prev.length >= MAX_SPHERES) return prev
+      const r = 56 + Math.random() * 22
+      // 确定性摆放：优先落在同作者的球簇旁边，其次落入该作者的专属泳道；避开已有球
+      const mine = prev.filter((s) => s.authorId === role.id)
+      const laneIdx = Math.max(0, INITIAL_ROLES.findIndex((x) => x.id === role.id))
+      const base = mine.length
+        ? {
+            x: mine.reduce((a, s) => a + s.x, 0) / mine.length,
+            y: mine.reduce((a, s) => a + s.y, 0) / mine.length,
+          }
+        : { x: -380 + laneIdx * 380, y: -240 }
+      let pos = base
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const angle = Math.random() * Math.PI * 2
+        const dist = (mine.length ? 130 : 0) + r + 40 + Math.random() * 50
+        const x = base.x + Math.cos(angle) * dist
+        const y = base.y + Math.sin(angle) * dist * 0.7
+        if (prev.every((s) => Math.hypot(s.x - x, s.y - y) > (s.r + r) * 1.05)) {
+          pos = { x, y }
+          break
+        }
+      }
       return [
         ...prev,
-        {
-          id: makeId(),
-          x: (Math.random() - 0.5) * 720,
-          y: (Math.random() - 0.5) * 480,
-          r: 56 + Math.random() * 22,
-          label,
-          color: role.color,
-          authorId: role.id,
-          bornAt: Date.now(),
-        },
+        { id: makeId(), x: pos.x, y: pos.y, r, label, color: role.color, authorId: role.id, bornAt: Date.now() },
       ]
     })
   }, [])
@@ -193,8 +206,11 @@ export function useDiscussion(roomId: string) {
       pushMessage(role.id, '…')
       void (async () => {
         try {
+          const topicLine = topicRef.current
+            ? `\n\n本次讨论议题：「${topicRef.current}」。请始终围绕该议题发言，引用具体细节，不要跑题。`
+            : ''
           const msgs: ProviderMessage[] = [
-            { role: 'system', content: SYSTEM_PROMPTS[role.id] },
+            { role: 'system', content: SYSTEM_PROMPTS[role.id] + topicLine },
             ...recentContext(),
           ]
           if (replyTo) msgs.push({ role: 'user', content: `人类参与者刚说：「${replyTo}」。请直接回应他/她，承接上下文。` })
@@ -220,6 +236,23 @@ export function useDiscussion(roomId: string) {
     const iv = window.setInterval(() => postAI(), TICK_MS)
     return () => window.clearInterval(iv)
   }, [postAI])
+
+  // 新房间启动：把创建时填写的议题抛给所有 AI 方向，保证「讨论你提出的问题」
+  const bootedRef = useRef(false)
+  useEffect(() => {
+    if (bootedRef.current) return
+    bootedRef.current = true
+    const topic = topicRef.current
+    if (initialRef.current !== null || !topic) return
+    const t = `议题：「${topic}」。请大家围绕这个议题，从各自方向展开讨论。`
+    pushMessage(HUMAN_ID, t)
+    const t1 = window.setTimeout(() => postAI(t), 1000)
+    const t2 = window.setTimeout(() => postAI(), 3400)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+    }
+  }, [postAI, pushMessage])
 
   const sendHuman = useCallback(
     (text: string) => {
