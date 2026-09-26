@@ -86,6 +86,8 @@ export function useDiscussion(roomId: string) {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   /** 收敛出的结论卡片 */
   const [conclusions, setConclusions] = useState<Conclusion[]>(() => initialRef.current?.conclusions ?? [])
+  /** 收敛模式：用户点过「收敛讨论」后，结论随讨论实时自动刷新 */
+  const [converged, setConverged] = useState<boolean>(() => initialRef.current?.converged ?? false)
   /** 主持人 / 调度官的最新动态（显示在讨论面板顶部） */
   const [digest, setDigest] = useState<string | null>(null)
   /** AI 额度调度官开关 */
@@ -109,8 +111,12 @@ export function useDiscussion(roomId: string) {
   enginePausedRef.current = enginePaused
   const mergedRef = useRef(merged)
   mergedRef.current = merged
+  const bubblesRef = useRef(bubbles)
+  bubblesRef.current = bubbles
   const conclusionsRef = useRef(conclusions)
   conclusionsRef.current = conclusions
+  const convergedRef = useRef(converged)
+  convergedRef.current = converged
   const governorOnRef = useRef(governorOn)
   governorOnRef.current = governorOn
   /** 每个角色的发言数（调度官算「产出/额度」效率用） */
@@ -382,6 +388,11 @@ export function useDiscussion(roomId: string) {
         const text = '🧭 额度调度官：所有方向额度均已耗尽，自动回补 30% 防止讨论锁死。'
         setDigest(text)
         recordTimeline('governor', text)
+      }
+      // 结论实时刷新：收敛模式下，讨论每有进展（新球/新拼接/球变大），结论自动重算
+      if (convergedRef.current && computeConclusionsRef.current) {
+        const fresh = computeConclusionsRef.current()
+        if (fresh.length) setConclusions(fresh)
       }
     }, TICK_MS)
     return () => window.clearInterval(iv)
@@ -695,10 +706,10 @@ export function useDiscussion(roomId: string) {
     return () => window.clearInterval(iv)
   }, [interpretRelationLive, upsertBubble, recordTimeline])
 
-  /** 结论收敛：把相近的关键球（拼接簇，无拼接则按作者方向）聚成 2~3 张结论卡片 */
-  const converge = useCallback(() => {
+  /** 聚类计算：把相近的关键球（拼接簇，无拼接则按作者方向）聚成最多 3 组结论 */
+  const computeConclusions = useCallback((): Conclusion[] => {
     const sp = spheresRef.current
-    if (!sp.length) return null
+    if (!sp.length) return []
     const parent = new Map(sp.map((s) => [s.id, s.id]))
     const find = (x: string): string => {
       let r = x
@@ -732,7 +743,7 @@ export function useDiscussion(roomId: string) {
       }
       groups = Array.from(byAuthor.values()).sort((a, b) => b.length - a.length)
     }
-    const cs: Conclusion[] = groups.slice(0, 3).map((g) => {
+    return groups.slice(0, 3).map((g) => {
       const sorted = [...g].sort((a, b) => b.r - a.r)
       return {
         id: makeId(),
@@ -741,12 +752,23 @@ export function useDiscussion(roomId: string) {
         sourceIds: g.map((s) => s.id),
       }
     })
+  }, [])
+
+  /** 收敛讨论：立即聚类一次，并进入「结论实时刷新」模式——之后讨论每有进展，结论自动更新 */
+  const converge = useCallback(() => {
+    const cs = computeConclusions()
+    if (!cs.length) return null
     setConclusions(cs)
-    const text = `🧭 收敛出 ${cs.length} 条结论：${cs.map((c) => `「${c.title}」`).join('、')}`
+    setConverged(true)
+    const text = `🧭 收敛出 ${cs.length} 条结论：${cs.map((c) => `「${c.title}」`).join('、')}。此后结论将随讨论实时更新。`
     setDigest(text)
     recordTimeline('moderator', text)
     return cs
-  }, [recordTimeline])
+  }, [computeConclusions, recordTimeline])
+
+  // 主循环（定义在前）通过 ref 访问聚类函数，避免 TDZ
+  const computeConclusionsRef = useRef(computeConclusions)
+  computeConclusionsRef.current = computeConclusions
 
   /** 讨论报告（Markdown）：议题 / 结论 / 各方向要点 / 关键球 / 额度消耗 */
   const reportMarkdown = useCallback(() => {
@@ -775,6 +797,22 @@ export function useDiscussion(roomId: string) {
     lines.push('## 关键球')
     spheresRef.current.forEach((s) => lines.push(`- ${s.label}`))
     lines.push('')
+    // 拼接关系：关键球互相靠近时 AI 给出的方向关联解读
+    const relations = bubblesRef.current
+    if (relations.length) {
+      lines.push('## 关键球关系（拼接解读）')
+      relations.forEach((b) => lines.push(`- ${b.text}`))
+      lines.push('')
+    }
+    // 完整讨论记录：每个方向的全部有效发言（此前的导出只含最近 3 条，讨论长时不全面）
+    lines.push('## 完整讨论记录')
+    for (const r of rolesRef.current) {
+      const msgs = (messagesRef.current[r.id] ?? []).filter((m) => !m.text.startsWith('（') && m.text !== '…')
+      if (!msgs.length) continue
+      lines.push(`### ${r.name}（${r.persona}）· ${msgs.length} 条`)
+      msgs.forEach((m) => lines.push(`- ${m.text}`))
+      lines.push('')
+    }
     lines.push('## 额度消耗')
     lines.push('| 角色 | 已用 (tok) | 额度 (tok) |')
     lines.push('| --- | ---: | ---: |')
@@ -787,11 +825,11 @@ export function useDiscussion(roomId: string) {
   // 房间状态持久化：变更后 800ms 落盘，回到主页再进来讨论不丢
   useEffect(() => {
     const t = window.setTimeout(() => {
-      saveRoomState(roomId, { messages, spheres, roles, enginePaused, conclusions })
+      saveRoomState(roomId, { messages, spheres, roles, enginePaused, conclusions, converged })
       touchProject(roomId)
     }, 800)
     return () => window.clearTimeout(t)
-  }, [messages, spheres, roles, enginePaused, conclusions, roomId])
+  }, [messages, spheres, roles, enginePaused, conclusions, converged, roomId])
 
   /** 继续讨论 = 主持人重整额度：解除全部「待批准」并回补 40%，讨论立刻复活 */
   const toggleEngine = useCallback(() => {

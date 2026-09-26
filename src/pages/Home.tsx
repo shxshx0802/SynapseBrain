@@ -47,7 +47,7 @@ export default function Home() {
               <Orbit className="h-5.5 w-5.5 text-white" />
             </span>
             <h1 className="bg-gradient-to-br from-white via-white to-slate-500 bg-clip-text text-2xl font-bold tracking-wide text-transparent">
-              KeySphere
+              SynapseBrain
             </h1>
           </div>
           <p className="pl-1 text-sm text-slate-500">每个项目一块独立画布，多 AI 分方向讨论，互不混淆</p>
@@ -64,7 +64,7 @@ export default function Home() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && createProject()}
-              placeholder="项目名称，如：KeySphere MVP 方案"
+              placeholder="项目名称，如：SynapseBrain MVP 方案"
               className="h-11 border-white/10 bg-black/60 transition-colors focus-visible:border-white/30 sm:w-64"
             />
             <Input

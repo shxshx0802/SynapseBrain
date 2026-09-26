@@ -17,6 +17,8 @@ export interface RoomState {
   enginePaused?: boolean
   /** 最近一次收敛出的结论卡片 */
   conclusions?: Conclusion[]
+  /** 用户已点击过「收敛讨论」：结论进入实时自动刷新模式 */
+  converged?: boolean
   savedAt: number
 }
 
