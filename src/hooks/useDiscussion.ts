@@ -745,10 +745,25 @@ export function useDiscussion(roomId: string) {
     }
     return groups.slice(0, 3).map((g) => {
       const sorted = [...g].sort((a, b) => b.r - a.r)
+      const points = sorted.slice(1, 5).map((s) => s.label)
+      // 结论跟着讨论走：并入该簇作者的最新发言要点。
+      // 关键球到上限(14)后不再新增，纯球面标签会让结论永远冻结——混入实时发言后，讨论每有进展结论即刷新
+      const authors = Array.from(new Set(g.map((s) => s.authorId)))
+      for (const aid of authors) {
+        if (points.length >= 5) break
+        const role = rolesRef.current.find((r) => r.id === aid)
+        const msgs = messagesRef.current[aid] ?? []
+        const latest = msgs.filter((m) => !m.text.startsWith('（') && m.text !== '…').slice(-1)[0]
+        if (!latest) continue
+        const snippet = latest.text.slice(0, 42) + (latest.text.length > 42 ? '…' : '')
+        const line = `${role?.name ?? 'AI'}：${snippet}`
+        if (!points.some((p) => p === line || p.includes(snippet.slice(0, 16)))) points.push(line)
+      }
+      // id 由簇成员决定：簇不变则 id 稳定，卡片不重建、不闪动；簇一变自然换新卡
       return {
-        id: makeId(),
+        id: g.map((s) => s.id).sort().join('|'),
         title: sorted[0].label,
-        points: sorted.slice(1, 5).map((s) => s.label),
+        points,
         sourceIds: g.map((s) => s.id),
       }
     })
