@@ -4,9 +4,13 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { inspectAttr } from 'kimi-plugin-inspect-react'
 
+// GitHub Pages 部署在 /SynapseBrain/ 子路径：GH_PAGES=1 npm run build 时切换 base，
+// 使资源引用与路由 basename 都带上子路径；本地开发保持 './' 不变
+const ghPages = process.env.GH_PAGES === '1'
+
 // https://vite.dev/config/
 export default defineConfig({
-  base: './',
+  base: ghPages ? '/SynapseBrain/' : './',
   plugins: [inspectAttr(), react()],
   server: {
     port: 7100,
