@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CanvasBoard } from '@/components/CanvasBoard'
 import { DiscussionPanel } from '@/components/DiscussionPanel'
+import { GestureVoiceDock } from '@/components/GestureVoiceDock'
 import { SphereDetail } from '@/components/SphereDetail'
 import { useDiscussion } from '@/hooks/useDiscussion'
 import { getProject } from '@/shared/storage'
@@ -16,12 +17,15 @@ export default function Room() {
   const [reduceMotion, setReduceMotion] = useState(false)
   const [inspectId, setInspectId] = useState<string | null>(null)
   const [fitRequest, setFitRequest] = useState<{ halfW: number; halfH: number; nonce: number } | null>(null)
+  const [zoomRequest, setZoomRequest] = useState<{ dir: 'in' | 'out'; nonce: number } | null>(null)
   const project = getProject(id)
 
   const handleLayout = () => {
     const bounds = layoutSpheres()
     if (bounds) setFitRequest({ ...bounds, nonce: Date.now() })
   }
+
+  const handleGestureZoom = (dir: 'in' | 'out') => setZoomRequest({ dir, nonce: Date.now() })
 
   const inspectSphere = inspectId ? spheres.find((s) => s.id === inspectId) ?? null : null
   const inspectRole = inspectSphere ? roles.find((r) => r.id === inspectSphere.authorId) ?? null : null
@@ -91,6 +95,7 @@ export default function Room() {
             reduceMotion={reduceMotion}
             enginePaused={enginePaused}
             fitRequest={fitRequest}
+            zoomRequest={zoomRequest}
             onMoveSphere={moveSphere}
             onResizeSphere={resizeSphere}
             onAttachFile={attachDocument}
@@ -105,6 +110,7 @@ export default function Room() {
               onClose={() => setInspectId(null)}
             />
           )}
+          <GestureVoiceDock onZoom={handleGestureZoom} onVoiceCommand={sendHuman} />
         </div>
       </div>
     </div>

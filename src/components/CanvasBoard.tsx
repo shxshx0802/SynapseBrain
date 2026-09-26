@@ -18,13 +18,15 @@ interface Props {
   enginePaused: boolean
   /** 整理布局后的自动取景请求（半宽/半高 + nonce），画布据此缩放到能看见整个环形 */
   fitRequest?: { halfW: number; halfH: number; nonce: number } | null
+  /** 手势摆动驱动的外部缩放脉冲（nonce 去重），以画布中心为锚点 */
+  zoomRequest?: { dir: 'in' | 'out'; nonce: number } | null
   onMoveSphere: (id: string, x: number, y: number) => void
   onResizeSphere: (id: string, r: number) => void
   onAttachFile: (file: File) => void
   onInspect: (id: string) => void
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, onMoveSphere, onResizeSphere, onAttachFile, onInspect }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, zoomRequest, onMoveSphere, onResizeSphere, onAttachFile, onInspect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fxCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -178,6 +180,22 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     const k = Math.min(2.5, Math.max(0.2, Math.min(W / (fitRequest.halfW * 2), H / (fitRequest.halfH * 2)) * 0.92))
     setView({ k, x: W / 2, y: H / 2 })
   }, [fitRequest])
+
+  /** 手势摆动缩放脉冲：以画布中心为锚点逐级缩放（nonce 去重） */
+  const lastZoomNonceRef = useRef(0)
+  useEffect(() => {
+    if (!zoomRequest || zoomRequest.nonce === lastZoomNonceRef.current) return
+    lastZoomNonceRef.current = zoomRequest.nonce
+    setView((v) => {
+      const k2 = Math.min(2.5, Math.max(0.2, v.k * (zoomRequest.dir === 'in' ? 1.12 : 1 / 1.12)))
+      const rect = containerRef.current?.getBoundingClientRect()
+      const mx = rect ? rect.width / 2 : 0
+      const my = rect ? rect.height / 2 : 0
+      const wx = (mx - v.x) / v.k
+      const wy = (my - v.y) / v.k
+      return { k: k2, x: mx - wx * k2, y: my - wy * k2 }
+    })
+  }, [zoomRequest])
 
   /** 滚轮缩放（需 passive: false 才能 preventDefault） */
   useEffect(() => {
