@@ -1,73 +1,74 @@
-# React + TypeScript + Vite
+# KeySphere
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+多 AI 协作讨论画布：多个 AI 分方向讨论议题，讨论过程中自动生成「关键球」——每个关键球是一个方向的精确表达。人与 AI 在同一块画布上协作，可以拖动文件让 AI 讨论，也可以随时插话。
 
-Currently, two official plugins are available:
+## 运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # http://localhost:7100
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+复制 `.env.example` 为 `.env` 并填入 `VITE_MOONSHOT_API_KEY` 可接入真实模型；不配置则运行演示模式（本地话术池）。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 页面
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| 路由 | 说明 |
+|---|---|
+| `/` | 主页：创建 / 管理不同项目的讨论房间，互不混淆 |
+| `/room/:id` | 讨论室：画布 + 讨论面板 + 手势语音控制 |
+| `/lab` | 手势 & 语音实验室：识别能力的独立测试页 |
+
+## 讨论室操作
+
+### 鼠标 / 触屏
+
+- 拖动关键球移动；悬停滚轮调整单球大小；双指捏合调大小
+- 空白处滚轮缩放画布，按住拖动平移
+- 两个关键球靠近：融球 + 光波 + 震动反馈，AI 说出两者关系
+- 双击关键球查看完整内容（生成过程 + 讨论线程）
+- 把 PDF / DOCX / 图片 / 文本文件拖入画布，所有 AI 围绕文件讨论
+- 顶部可暂停 / 继续讨论、一键整理布局（同心环形）
+
+### 手势控制（右下角控制坞「启手势」，需摄像头）
+
+先**张开双手**唤醒（控制坞出现「已唤醒」），之后：
+
+| 手势 | 作用 |
+|---|---|
+| 移动食指 | 光标跟随；**靠近关键球自动减速**（光标环变琥珀色），防止手滑 |
+| 左手左右摆动 | 放大画布 |
+| 右手左右摆动 | 缩小画布 |
+| 右手握拳 | 关键球上 = 抓住拖动该球；空白处 = 拖动整个画布；变掌松开 |
+| 左手握拳 | 双击打开光标处的关键球内容 |
+| 左手手背朝向摄像头 | 退出已打开的内容面板 |
+| 双手离开画面约 2.5 秒 | 自动退出手势模式 |
+
+提示：识别出的左右手与实际相反时，点控制坞「换」开关校准（不影响光标方向）。
+
+### 语音参与（控制坞「启语音」，需麦克风）
+
+说唤醒词「**小K**」→ 听到提示音后 6 秒内说出观点 → 自动作为人类消息送入讨论，所有 AI 围绕你的发言继续讨论。未说完会自动续时，安静 6 秒自动提交。
+
+## 技术要点
+
+- 手势：MediaPipe HandLandmarker（本地模型，`public/mp/`，离线可用），CPU 推理规避部分显卡驱动崩溃
+- 语音：浏览器内置语音识别（Chromium），唤醒词匹配
+- 手势操作通过向关键球派发合成指针事件实现，与鼠标操作完全复用同一套交互逻辑
+- 关键球：双层画布（goo 滤镜画球体融球 + 独立层画光波），待机常开白色涟漪光波
+- 黑底主题锁定；「减少动态效果」开关只关闭强反馈（震动/脉冲），不影响待机光波与主题色
+
+## 目录
+
+```
+src/
+  pages/Home.tsx            主页（项目管理）
+  pages/Room.tsx            讨论室
+  components/CanvasBoard.tsx    画布（球体/融球/光波/拖放文件）
+  components/GestureVoiceDock.tsx  手势 & 语音控制坞
+  components/DiscussionPanel.tsx  讨论面板
+  lab/GestureLab.tsx        手势语音实验室
+  hooks/useDiscussion.ts    讨论引擎（角色/额度/关键球生成）
+  ai/                       模型接入与演示话术池
+  shared/                   类型与本地存储
 ```

@@ -26,13 +26,20 @@ function classify(lm: NormalizedLandmark[]): HandGesture {
     [16, 14],
     [20, 18],
   ]
+  // 伸直：指尖明显比指根离手腕更远；蜷曲：指尖明显收近手腕。
+  // 两级阈值避免「手指稍弯（放松半握）」被误判为握拳——必须明显蜷曲才算拳
+  const RATIO_EXTEND = 1.18
+  const RATIO_CURL = 0.92
   let extended = 0
+  let curled = 0
   for (const [tip, pip] of pairs) {
-    if (dist(wrist, lm[tip]) > dist(wrist, lm[pip]) * 1.12) extended++
+    const ratio = dist(wrist, lm[tip]) / Math.max(dist(wrist, lm[pip]), 1e-6)
+    if (ratio > RATIO_EXTEND) extended++
+    else if (ratio < RATIO_CURL) curled++
   }
   if (extended >= 4) return 'open'
-  if (extended <= 1) return 'fist'
-  if (dist(wrist, lm[8]) > dist(wrist, lm[6]) * 1.15) return 'point'
+  if (curled >= 4 || (curled >= 3 && extended === 0)) return 'fist'
+  if (extended === 1 && dist(wrist, lm[8]) > dist(wrist, lm[6]) * RATIO_EXTEND) return 'point'
   return 'none'
 }
 
