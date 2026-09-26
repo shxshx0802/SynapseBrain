@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AIRole, ChatMessage, KeySphereT, MergedPair, RelationBubble, RelationType } from '@/shared/types'
+import type { AIRole, ChatMessage, Conclusion, KeySphereT, MergedPair, QuotaPoint, RelationBubble, RelationType, TimelineEntry } from '@/shared/types'
 import { isLiveMode } from '@/shared/config'
 import { getProject, loadRoomState, saveRoomState, touchProject } from '@/shared/storage'
 import { createDefaultProvider, type ChatProvider, type ContentPart, type ProviderMessage } from '@/ai/provider'
@@ -80,6 +80,16 @@ export function useDiscussion(roomId: string) {
   const [bubbles, setBubbles] = useState<RelationBubble[]>([])
   const [merged, setMerged] = useState<Record<string, MergedPair>>({})
   const [enginePaused, setEnginePaused] = useState<boolean>(() => initialRef.current?.enginePaused ?? false)
+  /** 额度历史采样（仪表盘） */
+  const [quotaHistory, setQuotaHistory] = useState<QuotaPoint[]>([])
+  /** 时间轴事件（回放） */
+  const [timeline, setTimeline] = useState<TimelineEntry[]>([])
+  /** 收敛出的结论卡片 */
+  const [conclusions, setConclusions] = useState<Conclusion[]>(() => initialRef.current?.conclusions ?? [])
+  /** 主持人 / 调度官的最新动态（显示在讨论面板顶部） */
+  const [digest, setDigest] = useState<string | null>(null)
+  /** AI 额度调度官开关 */
+  const [governorOn, setGovernorOn] = useState(true)
 
   const providerRef = useRef<ChatProvider | null>(null)
   if (providerRef.current === null && mode === 'live') providerRef.current = createDefaultProvider()
@@ -97,8 +107,27 @@ export function useDiscussion(roomId: string) {
   const lastVibrateRef = useRef(0)
   const enginePausedRef = useRef(enginePaused)
   enginePausedRef.current = enginePaused
+  const mergedRef = useRef(merged)
+  mergedRef.current = merged
+  const conclusionsRef = useRef(conclusions)
+  conclusionsRef.current = conclusions
+  const governorOnRef = useRef(governorOn)
+  governorOnRef.current = governorOn
+  /** 每个角色的发言数（调度官算「产出/额度」效率用） */
+  const msgCountRef = useRef<Record<string, number>>({})
+  const lastGovernRef = useRef(0)
+  const tickCountRef = useRef(0)
+
+  /** 记录时间轴事件：附带当时的画布快照供回放 */
+  const recordTimeline = useCallback((kind: TimelineEntry['kind'], text: string) => {
+    setTimeline((prev) => [
+      ...prev.slice(-149),
+      { t: Date.now(), kind, text, spheres: spheresRef.current.map((s) => ({ ...s })), merged: { ...mergedRef.current } },
+    ])
+  }, [])
 
   const pushMessage = useCallback((roleId: string, text: string, id?: string) => {
+    if (roleId !== HUMAN_ID) msgCountRef.current[roleId] = (msgCountRef.current[roleId] ?? 0) + 1
     setMessages((prev) => {
       const list = prev[roleId] ?? []
       return { ...prev, [roleId]: [...list, { id: id ?? makeId(), roleId, threadId: roleId, text, at: Date.now() }] }
@@ -173,9 +202,11 @@ export function useDiscussion(roomId: string) {
       const idx = (poolIndexRef.current[role.id] = (poolIndexRef.current[role.id] ?? 0) + 1)
       const pool = SPHERE_LABEL_POOLS[role.id]
       const contentPool = SPHERE_CONTENT_POOLS[role.id]
-      addSphere(role, pool[idx % pool.length], contentPool[idx % contentPool.length])
+      const label = pool[idx % pool.length]
+      addSphere(role, label, contentPool[idx % contentPool.length])
+      recordTimeline('sphere', `💠 ${role.name} 凝结关键球「${label}」`)
     },
-    [addSphere],
+    [addSphere, recordTimeline],
   )
 
   /** 实时模式：让模型把自己的观点浓缩成关键球标签，原文随球保存 */
@@ -190,13 +221,16 @@ export function useDiscussion(roomId: string) {
           { maxTokens: 512 },
         )
         const label = res.text.replace(/[「」"'“”'、，。,.：:；;\n\s]/g, '').slice(0, 12)
-        if (label.length >= 2) addSphere(role, label, text)
+        if (label.length >= 2) {
+          addSphere(role, label, text)
+          recordTimeline('sphere', `💠 ${role.name} 凝结关键球「${label}」`)
+        }
         chargeRole(role.id, res.tokens)
       } catch {
         /* 标签生成失败不影响讨论，静默忽略 */
       }
     },
-    [addSphere, chargeRole],
+    [addSphere, chargeRole, recordTimeline],
   )
 
   /** 构建给模型的近期上下文：人类消息带标记，AI 消息不署名（避免被模仿进输出） */
@@ -265,13 +299,84 @@ export function useDiscussion(roomId: string) {
     [chargeRole, pushMessage, recentContext, replaceMessage, spawnSphereLive, spawnSphereMock],
   )
 
+  /** 主持人 AI：定期把各方向最新动态收敛成一段主持词 */
+  const runModerator = useCallback(() => {
+    const rs = rolesRef.current
+    if (rs.length < 2) return
+    const latest = rs.map((r) => ({ r, m: (messagesRef.current[r.id] ?? []).filter((x) => !x.text.startsWith('（') && x.text !== '…').at(-1) }))
+    const withMsg = latest.filter((x) => x.m)
+    if (withMsg.length < 2) return
+    const parts = withMsg.slice(0, 3).map((x) => `${x.r.name}：「${x.m!.text.slice(0, 26)}${x.m!.text.length > 26 ? '…' : ''}」`)
+    const quiet = latest.find((x) => !x.m)
+    let text = `🎙 主持人：${parts.join('；')}`
+    if (quiet) text += `。目前「${quiet.r.name}」还没展开，可以就${topicRef.current ? `「${topicRef.current}」` : '当前议题'}回应一下`
+    text += '。'
+    setDigest(text)
+    recordTimeline('moderator', text)
+  }, [recordTimeline])
+
+  /** 4 字滑窗集合（中文相关性判定用） */
+  const shingles = (s: string) => {
+    const set = new Set<string>()
+    for (let i = 0; i + 4 <= s.length; i++) set.add(s.slice(i, i + 4))
+    return set
+  }
+
+  /** 额度调度官：自动暂停低产出角色，把额度留给高产出方向 */
+  const runGovernor = useCallback(() => {
+    if (!governorOnRef.current) return
+    const now = Date.now()
+    if (now - lastGovernRef.current < 10000) return
+    const rs = rolesRef.current
+    const effOf = (id: string) => (msgCountRef.current[id] ?? 0) / Math.max(rs.find((r) => r.id === id)?.used ?? 1, 1)
+    const valid = rs.filter((r) => (msgCountRef.current[r.id] ?? 0) >= 3)
+    if (valid.length < 2) return
+    const avg = valid.reduce((a, r) => a + effOf(r.id), 0) / valid.length
+    const target = rs.find((r) => !r.paused && r.used > r.budget * 0.8 && (msgCountRef.current[r.id] ?? 0) >= 3 && effOf(r.id) < avg * 0.6)
+    if (!target) return
+    lastGovernRef.current = now
+    setRoles((prev) => prev.map((r) => (r.id === target.id ? { ...r, paused: true } : r)))
+    const text = `🧭 额度调度：暂停「${target.name}」（产出/额度偏低），额度留给高产出方向`
+    setDigest(text)
+    recordTimeline('governor', text)
+  }, [recordTimeline])
+
+  /** 人类发言后：调度官为方向相关的角色回补额度（人类关注 = 值得花额度） */
+  const boostByRelevance = useCallback(
+    (humanText: string) => {
+      if (!governorOnRef.current) return
+      const human = shingles(humanText)
+      if (!human.size) return
+      const hits = rolesRef.current.filter((r) => {
+        const recent = (messagesRef.current[r.id] ?? []).slice(-3).map((m) => m.text).join('')
+        if (recent.length < 4) return false
+        const rs = shingles(recent)
+        for (const sh of human) if (rs.has(sh)) return true
+        return false
+      })
+      if (!hits.length) return
+      setRoles((prev) => prev.map((r) => (hits.some((h) => h.id === r.id) ? { ...r, paused: false, used: Math.floor(r.used * 0.85) } : r)))
+      const revived = hits.filter((h) => h.paused)
+      const text = `🧭 额度调度：你的发言与 ${hits.map((h) => `「${h.name}」`).join('、')} 方向相关，已回补 15% 额度${revived.length ? `并解除 ${revived.map((r) => `「${r.name}」`).join('、')} 的暂停` : ''}`
+      setDigest(text)
+      recordTimeline('governor', text)
+    },
+    [recordTimeline],
+  )
+
   // 引擎主循环：驱动多 AI 并行讨论（暂停时保持静默，插话仍可手动触发回应）
   useEffect(() => {
     const iv = window.setInterval(() => {
-      if (!enginePausedRef.current) postAI()
+      if (enginePausedRef.current) return
+      postAI()
+      // 额度采样（仪表盘）
+      setQuotaHistory((prev) => [...prev.slice(-199), { t: Date.now(), used: Object.fromEntries(rolesRef.current.map((r) => [r.id, r.used])) }])
+      tickCountRef.current++
+      if (tickCountRef.current % 5 === 0) runModerator()
+      runGovernor()
     }, TICK_MS)
     return () => window.clearInterval(iv)
-  }, [postAI])
+  }, [postAI, runModerator, runGovernor])
 
   // 新房间启动：把创建时填写的议题抛给所有 AI 方向，保证「讨论你提出的问题」
   // 判定条件用「还没有人类消息」而非「无存档」，老房间升级后也能补启动
@@ -299,9 +404,11 @@ export function useDiscussion(roomId: string) {
       const trimmed = text.trim()
       if (!trimmed) return
       pushMessage(HUMAN_ID, trimmed)
+      recordTimeline('human', `🧑 你：${trimmed.slice(0, 30)}${trimmed.length > 30 ? '…' : ''}`)
+      boostByRelevance(trimmed)
       if (Math.random() < 0.85) window.setTimeout(() => postAI(trimmed), 600)
     },
-    [postAI, pushMessage],
+    [postAI, pushMessage, recordTimeline, boostByRelevance],
   )
 
   /** 拖入文件：提取内容 → 展示摘要 → 让 AI 立刻阅读并结合议题讨论 */
@@ -552,6 +659,7 @@ export function useDiscussion(roomId: string) {
               const speakers = rolesRef.current.filter((r) => !r.paused)
               const author = speakers.length ? speakers[(Math.random() * speakers.length) | 0] : INITIAL_ROLES[0]
               upsertBubble(key, a, b, type, text, author.id, now)
+              recordTimeline('merge', `🔗 ${text}`)
               const provider = providerRef.current
               if (provider) interpretRelationLive(key, a, b, author, provider)
               setSpheres((prev) => prev.map((s) => (s.id === a.id || s.id === b.id ? { ...s, pulseAt: now } : s)))
@@ -576,18 +684,111 @@ export function useDiscussion(roomId: string) {
     }
     const iv = window.setInterval(check, MERGE_CHECK_MS)
     return () => window.clearInterval(iv)
-  }, [interpretRelationLive, upsertBubble])
+  }, [interpretRelationLive, upsertBubble, recordTimeline])
+
+  /** 结论收敛：把相近的关键球（拼接簇，无拼接则按作者方向）聚成 2~3 张结论卡片 */
+  const converge = useCallback(() => {
+    const sp = spheresRef.current
+    if (!sp.length) return null
+    const parent = new Map(sp.map((s) => [s.id, s.id]))
+    const find = (x: string): string => {
+      let r = x
+      while (parent.get(r) !== r) r = parent.get(r)!
+      parent.set(x, r)
+      return r
+    }
+    for (const m of Object.values(mergedRef.current)) {
+      if (parent.has(m.aId) && parent.has(m.bId)) {
+        const ra = find(m.aId)
+        const rb = find(m.bId)
+        if (ra !== rb) parent.set(ra, rb)
+      }
+    }
+    let groups = Array.from(
+      sp.reduce((map, s) => {
+        const r = find(s.id)
+        const arr = map.get(r) ?? []
+        arr.push(s)
+        map.set(r, arr)
+        return map
+      }, new Map<string, KeySphereT[]>()).values(),
+    ).sort((a, b) => b.length - a.length)
+    if (groups.length < 2) {
+      // 画布上还没有拼接关系：按作者方向分组
+      const byAuthor = new Map<string, KeySphereT[]>()
+      for (const s of sp) {
+        const arr = byAuthor.get(s.authorId) ?? []
+        arr.push(s)
+        byAuthor.set(s.authorId, arr)
+      }
+      groups = Array.from(byAuthor.values()).sort((a, b) => b.length - a.length)
+    }
+    const cs: Conclusion[] = groups.slice(0, 3).map((g) => {
+      const sorted = [...g].sort((a, b) => b.r - a.r)
+      return {
+        id: makeId(),
+        title: sorted[0].label,
+        points: sorted.slice(1, 5).map((s) => s.label),
+        sourceIds: g.map((s) => s.id),
+      }
+    })
+    setConclusions(cs)
+    const text = `🧭 收敛出 ${cs.length} 条结论：${cs.map((c) => `「${c.title}」`).join('、')}`
+    setDigest(text)
+    recordTimeline('moderator', text)
+    return cs
+  }, [recordTimeline])
+
+  /** 讨论报告（Markdown）：议题 / 结论 / 各方向要点 / 关键球 / 额度消耗 */
+  const reportMarkdown = useCallback(() => {
+    const project = getProject(roomId)
+    const lines: string[] = [`# ${project?.name ?? '讨论报告'}`, '']
+    if (project?.topic) lines.push(`**议题**：${project.topic}`)
+    lines.push(`**导出时间**：${new Date().toLocaleString()}`)
+    lines.push('')
+    const cs = conclusionsRef.current
+    if (cs.length) {
+      lines.push('## 结论')
+      cs.forEach((c, i) => {
+        lines.push(`${i + 1}. **${c.title}**`)
+        c.points.forEach((p) => lines.push(`   - ${p}`))
+      })
+      lines.push('')
+    }
+    lines.push('## 各方向要点')
+    for (const r of rolesRef.current) {
+      const msgs = (messagesRef.current[r.id] ?? []).filter((m) => !m.text.startsWith('（') && m.text !== '…').slice(-3)
+      if (!msgs.length) continue
+      lines.push(`### ${r.name}（${r.persona}）`)
+      msgs.forEach((m) => lines.push(`- ${m.text}`))
+      lines.push('')
+    }
+    lines.push('## 关键球')
+    spheresRef.current.forEach((s) => lines.push(`- ${s.label}`))
+    lines.push('')
+    lines.push('## 额度消耗')
+    lines.push('| 角色 | 已用 (tok) | 额度 (tok) |')
+    lines.push('| --- | ---: | ---: |')
+    rolesRef.current.forEach((r) => lines.push(`| ${r.name} | ${r.used.toLocaleString()} | ${r.budget.toLocaleString()} |`))
+    return lines.join('\n')
+  }, [roomId])
+
+  const toggleGovernor = useCallback(() => setGovernorOn((v) => !v), [])
 
   // 房间状态持久化：变更后 800ms 落盘，回到主页再进来讨论不丢
   useEffect(() => {
     const t = window.setTimeout(() => {
-      saveRoomState(roomId, { messages, spheres, roles, enginePaused })
+      saveRoomState(roomId, { messages, spheres, roles, enginePaused, conclusions })
       touchProject(roomId)
     }, 800)
     return () => window.clearTimeout(t)
-  }, [messages, spheres, roles, enginePaused, roomId])
+  }, [messages, spheres, roles, enginePaused, conclusions, roomId])
 
   const toggleEngine = useCallback(() => setEnginePaused((p) => !p), [])
 
-  return { mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, approveRole, moveSphere, resizeSphere, layoutSpheres }
+  return {
+    mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument,
+    approveRole, moveSphere, resizeSphere, layoutSpheres,
+    quotaHistory, timeline, conclusions, digest, converge, reportMarkdown, governorOn, toggleGovernor,
+  }
 }

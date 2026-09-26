@@ -1,5 +1,5 @@
 // 本地优先存储：项目列表与各讨论房间的状态（localStorage）
-import type { AIRole, ChatMessage, KeySphereT } from './types'
+import type { AIRole, ChatMessage, Conclusion, KeySphereT } from './types'
 
 export interface ProjectMeta {
   id: string
@@ -15,6 +15,8 @@ export interface RoomState {
   roles: AIRole[]
   /** 讨论引擎是否暂停（AI 不再自动发言） */
   enginePaused?: boolean
+  /** 最近一次收敛出的结论卡片 */
+  conclusions?: Conclusion[]
   savedAt: number
 }
 

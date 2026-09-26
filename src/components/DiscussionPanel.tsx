@@ -11,6 +11,8 @@ interface Props {
   messages: Record<string, ChatMessage[]>
   onApprove: (roleId: string) => void
   onSend: (text: string) => void
+  /** 主持人 / 调度官的最新动态 */
+  digest?: string | null
 }
 
 function RoleAvatar({ color, name, size = 22 }: { color: string; name: string; size?: number }) {
@@ -39,7 +41,7 @@ function ThinkingDots() {
   )
 }
 
-export function DiscussionPanel({ roles, messages, onApprove, onSend }: Props) {
+export function DiscussionPanel({ roles, messages, onApprove, onSend, digest }: Props) {
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -109,6 +111,11 @@ export function DiscussionPanel({ roles, messages, onApprove, onSend }: Props) {
       {/* 全员讨论流 */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-3.5 p-3">
+          {digest && (
+            <div className="rounded-lg border border-amber-200/20 bg-amber-100/[0.06] px-2.5 py-2">
+              <p className="text-[11px] leading-relaxed text-amber-100/90">{digest}</p>
+            </div>
+          )}
           {stream.map((m) => {
             const role = m.roleId === HUMAN_ID ? null : roles.find((r) => r.id === m.roleId)
             const name = role?.name ?? '你'

@@ -74,11 +74,34 @@ declare global {
 const WAKE_RE = /(小\s*[kKｋＫ])|(kimi)/i
 const SYNTH_POINTER_ID = 9001
 
+/** 语音控场指令（唤醒后说出） */
+export type VoiceAction = 'pause' | 'resume' | 'layout' | 'converge' | 'zoom-in' | 'zoom-out' | 'export' | 'replay'
+
+const VOICE_COMMANDS: Array<[RegExp, VoiceAction]> = [
+  [/暂停|别说了|停一下|安静/, 'pause'],
+  [/继续|恢复|开始讨论/, 'resume'],
+  [/整理|布局/, 'layout'],
+  [/收敛|总结|结论/, 'converge'],
+  [/放大/, 'zoom-in'],
+  [/缩小/, 'zoom-out'],
+  [/导出|报告/, 'export'],
+  [/回放|时间轴/, 'replay'],
+]
+
+function matchVoiceCommand(text: string): VoiceAction | null {
+  for (const [re, action] of VOICE_COMMANDS) if (re.test(text)) return action
+  return null
+}
+
 interface Props {
   /** 摆动缩放：左手摆动传 'in'，右手摆动传 'out' */
   onZoom: (dir: 'in' | 'out') => void
   /** 唤醒词后的语音发言，送入讨论 */
   onVoiceCommand: (text: string) => void
+  /** 语音控场指令（暂停/继续/整理/收敛/缩放/导出/回放） */
+  onVoiceControl: (action: VoiceAction) => void
+  /** 双手倾斜：控制画布 3D 视角（角度制） */
+  onTilt: (rx: number, ry: number) => void
   /** 关键球内容面板是否打开（左手握拳时：开→关闭，关→双击打开） */
   detailOpen: boolean
   onCloseDetail: () => void
@@ -90,7 +113,7 @@ interface Props {
  * 语音：唤醒词「小K」→ 6 秒内发言 → onVoiceCommand 送入讨论
  * 抓取/双击通过向 [data-sphere] 元素派发合成指针事件实现，复用 CanvasBoard 现有交互逻辑。
  */
-export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDetail }: Props) {
+export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTilt, detailOpen, onCloseDetail }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -396,6 +419,23 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
       }
     }
 
+    // 双手倾斜：两手同屏、未握拳、未摆动、未抓取时，用两手中心偏移控制画布 3D 视角
+    const bothPresent = tracks.left.present && tracks.right.present
+    const neitherFist = tracks.left.gesture !== 'fist' && tracks.right.gesture !== 'fist'
+    if (gestureModeRef.current && bothPresent && neitherFist && !tracks.left.swinging && !tracks.right.swinging && !grabRef.current) {
+      const midX = (tracks.left.x + tracks.right.x) / 2
+      const midY = (tracks.left.y + tracks.right.y) / 2
+      const ry = Math.max(-16, Math.min(16, (midX - 0.5) * 36))
+      const rx = Math.max(-12, Math.min(12, (0.5 - midY) * 28))
+      if (Math.abs(rx - lastTiltRef.current.rx) > 0.4 || Math.abs(ry - lastTiltRef.current.ry) > 0.4) {
+        lastTiltRef.current = { rx, ry }
+        onTiltRef.current(rx, ry)
+      }
+    } else if (lastTiltRef.current.rx !== 0 || lastTiltRef.current.ry !== 0) {
+      lastTiltRef.current = { rx: 0, ry: 0 }
+      onTiltRef.current(0, 0)
+    }
+
     if (now - statusTimerRef.current > 200) {
       statusTimerRef.current = now
       setLeft(tracks.left)
@@ -463,6 +503,15 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
       if (!active) {
         const m = text.match(WAKE_RE)
         if (m) {
+          // 唤醒词同句带控场指令：「小K 暂停」直接执行，不进入发言模式
+          const remainder = text.slice((m.index ?? 0) + m[0].length).trim()
+          const cmd = matchVoiceCommand(remainder)
+          if (cmd) {
+            addLog(`🎙️ 控场指令：${remainder}`)
+            onVoiceControlRef.current(cmd)
+            beep(1046, 0.1)
+            return
+          }
           deadline = Date.now() + 6000
           commandBuf = text.slice((m.index ?? 0) + m[0].length).trim()
           addLog(`🔔 已唤醒，请说出你的观点…`)
@@ -470,14 +519,24 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
           setTimeout(() => beep(1318, 0.12), 130)
         }
       } else {
+        // 发言模式下说出控场指令：执行指令而非送入讨论
+        const cmd = finalText ? matchVoiceCommand(finalText) : null
+        if (cmd) {
+          commandBuf = ''
+          deadline = 0
+          addLog(`🎙️ 控场指令：${finalText.trim()}`)
+          onVoiceControlRef.current(cmd)
+          beep(1046, 0.1)
+          return
+        }
         commandBuf = (commandBuf + ' ' + text).trim()
         deadline = Date.now() + 6000
         if (finalText) {
-          const cmd = commandBuf
+          const cmd2 = commandBuf
           commandBuf = ''
           deadline = 0
-          addLog(`🎤 发言：${cmd.slice(0, 30)}`)
-          onVoiceCommandRef.current(cmd)
+          addLog(`🎤 发言：${cmd2.slice(0, 30)}`)
+          onVoiceCommandRef.current(cmd2)
           beep(784, 0.1)
         }
       }
@@ -519,6 +578,15 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
   useEffect(() => {
     onVoiceCommandRef.current = onVoiceCommand
   }, [onVoiceCommand])
+  const onVoiceControlRef = useRef(onVoiceControl)
+  useEffect(() => {
+    onVoiceControlRef.current = onVoiceControl
+  }, [onVoiceControl])
+  const onTiltRef = useRef(onTilt)
+  useEffect(() => {
+    onTiltRef.current = onTilt
+  }, [onTilt])
+  const lastTiltRef = useRef({ rx: 0, ry: 0 })
   const detailOpenRef = useRef(detailOpen)
   useEffect(() => {
     detailOpenRef.current = detailOpen

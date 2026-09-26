@@ -53,3 +53,27 @@ export interface MergedPair {
   /** 0~1，越近越接近 1 */
   intensity: number
 }
+
+/** 额度历史采样点（仪表盘用） */
+export interface QuotaPoint {
+  t: number
+  /** roleId → 累计已用 token */
+  used: Record<string, number>
+}
+
+/** 时间轴回放条目：关键事件 + 当时的画布快照 */
+export interface TimelineEntry {
+  t: number
+  kind: 'sphere' | 'merge' | 'human' | 'moderator' | 'governor'
+  text: string
+  spheres: KeySphereT[]
+  merged: Record<string, MergedPair>
+}
+
+/** 结论收敛卡片 */
+export interface Conclusion {
+  id: string
+  title: string
+  points: string[]
+  sourceIds: string[]
+}

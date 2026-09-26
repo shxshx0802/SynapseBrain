@@ -20,13 +20,15 @@ interface Props {
   fitRequest?: { halfW: number; halfH: number; nonce: number } | null
   /** 手势摆动驱动的外部缩放脉冲（nonce 去重），以画布中心为锚点 */
   zoomRequest?: { dir: 'in' | 'out'; nonce: number } | null
+  /** 双手倾斜（3D 视角），角度制；抓取/回放时应由调用方归零 */
+  tilt?: { rx: number; ry: number }
   onMoveSphere: (id: string, x: number, y: number) => void
   onResizeSphere: (id: string, r: number) => void
   onAttachFile: (file: File) => void
   onInspect: (id: string) => void
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, zoomRequest, onMoveSphere, onResizeSphere, onAttachFile, onInspect }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, zoomRequest, tilt, onMoveSphere, onResizeSphere, onAttachFile, onInspect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fxCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -394,31 +396,40 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" style={{ filter: 'url(#goo)' }} />
       <canvas ref={fxCanvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
 
-      {spheres.map((s) => (
-        <SphereNode
-          key={s.id}
-          sphere={s}
-          view={view}
-          shake={shakeById.get(s.id) ?? 0}
-          reduceMotion={reduceMotion}
-          onPointerDown={onSpherePointerDown}
-          onInspect={onInspect}
-        />
-      ))}
-
-      {bubbles.map((b) => {
-        const author = roles.find((r) => r.id === b.authorId)
-        return (
-          <BubbleCard
-            key={b.id}
-            bubble={b}
-            sx={b.x * view.k + view.x}
-            sy={b.y * view.k + view.y}
-            authorName={author?.name ?? 'AI'}
-            authorColor={author?.color ?? '#e2e8f0'}
+      {/* 3D 倾斜层：双手手势驱动的轻微视角倾斜，抓取/回放时外部归零 */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: tilt ? `perspective(1500px) rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` : undefined,
+          transition: 'transform 0.25s ease-out',
+        }}
+      >
+        {spheres.map((s) => (
+          <SphereNode
+            key={s.id}
+            sphere={s}
+            view={view}
+            shake={shakeById.get(s.id) ?? 0}
+            reduceMotion={reduceMotion}
+            onPointerDown={onSpherePointerDown}
+            onInspect={onInspect}
           />
-        )
-      })}
+        ))}
+
+        {bubbles.map((b) => {
+          const author = roles.find((r) => r.id === b.authorId)
+          return (
+            <BubbleCard
+              key={b.id}
+              bubble={b}
+              sx={b.x * view.k + view.x}
+              sy={b.y * view.k + view.y}
+              authorName={author?.name ?? 'AI'}
+              authorColor={author?.color ?? '#e2e8f0'}
+            />
+          )
+        })}
+      </div>
 
       {/* 文件拖放遮罩 */}
       {dragOver && (
