@@ -357,6 +357,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
   return (
     <div
       ref={containerRef}
+      data-canvas-board="true"
       className="relative min-w-0 flex-1 touch-none overflow-hidden bg-black"
       style={{
         backgroundImage:

@@ -110,7 +110,12 @@ export default function Room() {
               onClose={() => setInspectId(null)}
             />
           )}
-          <GestureVoiceDock onZoom={handleGestureZoom} onVoiceCommand={sendHuman} />
+          <GestureVoiceDock
+            onZoom={handleGestureZoom}
+            onVoiceCommand={sendHuman}
+            detailOpen={!!inspectSphere}
+            onCloseDetail={() => setInspectId(null)}
+          />
         </div>
       </div>
     </div>

@@ -72,6 +72,9 @@ interface Props {
   onZoom: (dir: 'in' | 'out') => void
   /** 唤醒词后的语音发言，送入讨论 */
   onVoiceCommand: (text: string) => void
+  /** 关键球内容面板是否打开（左手握拳时：开→关闭，关→双击打开） */
+  detailOpen: boolean
+  onCloseDetail: () => void
 }
 
 /**
@@ -80,7 +83,7 @@ interface Props {
  * 语音：唤醒词「小K」→ 6 秒内发言 → onVoiceCommand 送入讨论
  * 抓取/双击通过向 [data-sphere] 元素派发合成指针事件实现，复用 CanvasBoard 现有交互逻辑。
  */
-export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
+export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDetail }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -88,7 +91,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
   const landmarkerRef = useRef<HandLandmarker | null>(null)
   const lastVideoTimeRef = useRef(-1)
   const recRef = useRef<SpeechRecognitionLike | null>(null)
-  const grabRef = useRef<{ el: HTMLElement } | null>(null)
+  const grabRef = useRef<{ el: HTMLElement; pan: boolean } | null>(null)
   const lastFistRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false })
   const swingHistRef = useRef<{ left: Array<{ t: number; x: number }>; right: Array<{ t: number; x: number }> }>({
     left: [],
@@ -103,6 +106,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
   const gestureModeRef = useRef(false)
   const noneSinceRef = useRef(0)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  const cursorSlowRef = useRef(false)
 
   const [camOn, setCamOn] = useState(false)
   const [camBusy, setCamBusy] = useState(false)
@@ -114,6 +118,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
   const [right, setRight] = useState<HandTrack>(EMPTY_TRACK)
   const [cursorVisible, setCursorVisible] = useState(false)
   const [grabbing, setGrabbing] = useState(false)
+  const [cursorSlow, setCursorSlow] = useState(false)
   const [expanded, setExpanded] = useState(true)
   const [log, setLog] = useState<Array<{ t: string; text: string }>>([])
 
@@ -270,13 +275,27 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
     if (tip && cursor) {
       const rawX = (1 - tip.x) * window.innerWidth
       const rawY = tip.y * window.innerHeight
+      // 靠近关键球减速：离球越近光标越慢，防止抓球/双击时手滑过头
+      let nearestEdge = Infinity
+      document.querySelectorAll('[data-sphere]').forEach((el) => {
+        const r = (el as HTMLElement).getBoundingClientRect()
+        if (!r.width) return
+        const d = Math.hypot(r.left + r.width / 2 - rawX, r.top + r.height / 2 - rawY) - r.width / 2
+        if (d < nearestEdge) nearestEdge = d
+      })
+      const near = nearestEdge < 140
+      const follow = near ? 0.12 : 0.32
+      if (near !== cursorSlowRef.current) {
+        cursorSlowRef.current = near
+        setCursorSlow(near)
+      }
       const prev = cursorPosRef.current
       let cx = rawX
       let cy = rawY
       if (prev) {
-        cx = prev.x + (rawX - prev.x) * 0.32
-        cy = prev.y + (rawY - prev.y) * 0.32
-        if (Math.hypot(cx - prev.x, cy - prev.y) < 1.5) {
+        cx = prev.x + (rawX - prev.x) * follow
+        cy = prev.y + (rawY - prev.y) * follow
+        if (Math.hypot(cx - prev.x, cy - prev.y) < (near ? 3 : 1.5)) {
           cx = prev.x
           cy = prev.y
         }
@@ -289,15 +308,17 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
       cursor.style.opacity = '1'
       if (!cursorVisible) setCursorVisible(true)
 
-      // 右手握拳 = 抓取拖动真实关键球
+      // 右手握拳 = 抓取：在关键球上→拖动该球；在空白处→拖动画布
       const rightFist = tracks.right.gesture === 'fist'
       if (rightFist && !lastFistRef.current.right) {
-        const target = document.elementFromPoint(cx, cy)?.closest('[data-sphere]') as HTMLElement | null
+        const sphereEl = document.elementFromPoint(cx, cy)?.closest('[data-sphere]') as HTMLElement | null
+        const target = sphereEl ?? document.querySelector('[data-canvas-board]')
         if (target) {
-          grabRef.current = { el: target }
+          grabRef.current = { el: target as HTMLElement, pan: !sphereEl }
           firePointer(target, 'pointerdown', cx, cy, 1)
           setGrabbing(true)
-          beep(660, 0.08)
+          if (sphereEl) beep(660, 0.08)
+          else addLog('✋ 拖动画布')
         }
       } else if (!rightFist && lastFistRef.current.right && grabRef.current) {
         firePointer(grabRef.current.el, 'pointerup', cx, cy, 0)
@@ -307,14 +328,20 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
         firePointer(grabRef.current.el, 'pointermove', cx, cy, 1)
       }
 
-      // 左手握拳 = 双击打开关键球内容
+      // 左手握拳 = 内容面板开→关闭；关→双击打开关键球
       const leftFist = tracks.left.gesture === 'fist'
       if (leftFist && !lastFistRef.current.left && gestureModeRef.current) {
-        const target = document.elementFromPoint(cx, cy)?.closest('[data-sphere]') as HTMLElement | null
-        if (target) {
-          void fireDoubleTap(target, cx, cy)
-          addLog(`👊 双击打开「${target.textContent?.trim().slice(0, 12) ?? '关键球'}」`)
-          beep(520, 0.1)
+        if (detailOpenRef.current) {
+          onCloseDetailRef.current()
+          addLog('👊 退出关键球内容')
+          beep(392, 0.1)
+        } else {
+          const target = document.elementFromPoint(cx, cy)?.closest('[data-sphere]') as HTMLElement | null
+          if (target) {
+            void fireDoubleTap(target, cx, cy)
+            addLog(`👊 双击打开「${target.textContent?.trim().slice(0, 12) ?? '关键球'}」`)
+            beep(520, 0.1)
+          }
         }
       }
       lastFistRef.current = { left: leftFist, right: rightFist }
@@ -475,6 +502,14 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
   useEffect(() => {
     onVoiceCommandRef.current = onVoiceCommand
   }, [onVoiceCommand])
+  const detailOpenRef = useRef(detailOpen)
+  useEffect(() => {
+    detailOpenRef.current = detailOpen
+  }, [detailOpen])
+  const onCloseDetailRef = useRef(onCloseDetail)
+  useEffect(() => {
+    onCloseDetailRef.current = onCloseDetail
+  }, [onCloseDetail])
 
   const stopVoice = useCallback(() => {
     const rec = recRef.current
@@ -498,7 +533,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand }: Props) {
     <>
       {/* 手势光标 */}
       <div ref={cursorRef} className="pointer-events-none fixed left-0 top-0 z-50 h-8 w-8 opacity-0 transition-opacity duration-150">
-        <div className={`h-full w-full rounded-full border-2 ${grabbing ? 'border-pink-400 bg-pink-400/20' : 'border-white/80 bg-white/10'} shadow-[0_0_18px_rgba(255,255,255,0.5)]`} />
+        <div className={`h-full w-full rounded-full border-2 transition-colors duration-200 ${grabbing ? 'border-pink-400 bg-pink-400/20' : cursorSlow ? 'border-amber-300 bg-amber-300/10 shadow-[0_0_18px_rgba(252,211,77,0.5)]' : 'border-white/80 bg-white/10'} shadow-[0_0_18px_rgba(255,255,255,0.5)]`} />
       </div>
 
       <div className="fixed bottom-4 right-4 z-40 w-64 rounded-xl border border-slate-700/60 bg-slate-950/90 p-3 shadow-2xl backdrop-blur">
