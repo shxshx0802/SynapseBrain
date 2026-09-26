@@ -70,6 +70,7 @@ interface SpeechRecognitionLike {
   onresult: ((e: SREventLike) => void) | null
   onerror: ((e: { error: string }) => void) | null
   onend: (() => void) | null
+  onstart: (() => void) | null
   start: () => void
   stop: () => void
   abort: () => void
@@ -134,8 +135,29 @@ export default function GestureLab() {
   const [spheres, setSpheres] = useState<LabSphere[]>(INITIAL_SPHERES)
   const [log, setLog] = useState<Array<{ t: string; text: string }>>([])
 
+  /** 日志同时写入 localStorage：页面崩溃后刷新仍能看到崩溃前的记录 */
   const addLog = useCallback((text: string) => {
     setLog((prev) => [{ t: new Date().toLocaleTimeString(), text }, ...prev].slice(0, 60))
+    try {
+      const buf = JSON.parse(localStorage.getItem('ks-lab-log') || '[]') as Array<{ t: string; text: string }>
+      buf.push({ t: new Date().toLocaleTimeString(), text })
+      localStorage.setItem('ks-lab-log', JSON.stringify(buf.slice(-100)))
+    } catch {
+      /* 存储不可用时忽略 */
+    }
+  }, [])
+
+  /** 挂载时恢复上次会话（崩溃前）的日志 */
+  useEffect(() => {
+    try {
+      const buf = JSON.parse(localStorage.getItem('ks-lab-log') || '[]') as Array<{ t: string; text: string }>
+      localStorage.removeItem('ks-lab-log')
+      if (buf.length > 0) {
+        setLog([{ t: new Date().toLocaleTimeString(), text: `—— 上次会话日志（崩溃前，共 ${buf.length} 条）——` }, ...buf.slice(-30).reverse()])
+      }
+    } catch {
+      /* 忽略 */
+    }
   }, [])
 
   /** 提示音（唤醒 / 抓取反馈），复用同一个 AudioContext */
@@ -197,11 +219,36 @@ export default function GestureLab() {
     }
   }
 
+  /** 手势引擎只需创建一次，摄像头可反复启停 */
+  const ensureLandmarker = async () => {
+    if (landmarkerRef.current) return
+    const vision = await FilesetResolver.forVisionTasks('/mp/wasm')
+    landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: '/mp/hand_landmarker.task', delegate: 'GPU' },
+      runningMode: 'VIDEO',
+      numHands: 2,
+      minHandDetectionConfidence: 0.5,
+      minHandPresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    })
+  }
+
+  /** 停止视频采集（保留手势引擎，供语音授权等场景临时让出摄像头） */
+  const stopVideo = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    const video = videoRef.current
+    if (video) video.srcObject = null
+    setCamStatus('idle')
+  }, [])
+
   /** 启动摄像头 + 手势识别 */
   const startCamera = async () => {
     setCamStatus('starting')
     setCamError('')
     try {
+      await ensureLandmarker()
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: 'user' },
         audio: false,
@@ -222,16 +269,6 @@ export default function GestureLab() {
       video.srcObject = stream
       await video.play()
 
-      const vision = await FilesetResolver.forVisionTasks('/mp/wasm')
-      const landmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: '/mp/hand_landmarker.task', delegate: 'GPU' },
-        runningMode: 'VIDEO',
-        numHands: 2,
-        minHandDetectionConfidence: 0.5,
-        minHandPresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      })
-      landmarkerRef.current = landmarker
       setCamStatus('ready')
       addLog('✅ 摄像头与手势引擎已就绪')
 
@@ -456,7 +493,7 @@ export default function GestureLab() {
   }
 
   /** 启动语音识别 + 唤醒词「小K」：先显式申请麦克风权限，再启动识别 */
-  const startVoice = useCallback(async () => {
+  const startVoice = async () => {
     const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!Ctor) {
       setVoiceSupported(false)
@@ -464,8 +501,14 @@ export default function GestureLab() {
       return
     }
     setVoiceSupported(true)
-    // 先通过 getUserMedia 显式申请麦克风权限：比 SpeechRecognition 内部申请更可控，
-    // 拿到后立即释放音轨，避免与视频轨道长期并存
+    // 关键规避：视频采集中弹出麦克风授权气泡会在部分显卡驱动上崩掉 GPU 进程（页面黑屏）。
+    // 因此授权前先临时停掉摄像头，授权完成后再恢复；麦克风权限只需授予一次，
+    // 之后启动语音不再弹气泡，也不会再触发崩溃。
+    const hadCamera = camStatus === 'ready'
+    if (hadCamera) {
+      addLog('🎙️ 暂时关闭摄像头以申请麦克风权限…')
+      stopVideo()
+    }
     addLog('🎙️ 正在请求麦克风权限…')
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -474,13 +517,20 @@ export default function GestureLab() {
     } catch (err) {
       setVoiceError('麦克风权限被拒')
       addLog(`⚠️ 麦克风权限被拒：${err instanceof Error ? err.message : err}`)
+      if (hadCamera) void startCamera()
       return
     }
+    if (hadCamera) {
+      addLog('🎙️ 恢复摄像头…')
+      void startCamera()
+    }
+    addLog('🎙️ 正在启动识别器…')
     const rec = new Ctor()
     recRef.current = rec
     rec.lang = 'zh-CN'
     rec.continuous = true
     rec.interimResults = true
+    rec.onstart = () => addLog('🎙️ 识别器 onstart 已触发（音频采集开始）')
 
     rec.onresult = (e) => {
       voiceFailsRef.current = 0
@@ -528,8 +578,7 @@ export default function GestureLab() {
       }
     }
     rec.onend = () => {
-      setVoiceListening(false)
-      // 连续模式被系统打断时自动重启，保持常听；带退避，失败过多则放弃
+      setVoiceListening(false)      // 连续模式被系统打断时自动重启，保持常听；带退避，失败过多则放弃
       if (recRef.current === rec) {
         if (voiceFailsRef.current > 5) {
           addLog('🎙️ 语音连续失败，已停止自动重试（可点击「启动语音」再试）')
@@ -555,7 +604,7 @@ export default function GestureLab() {
     } catch (err) {
       setVoiceError(String(err))
     }
-  }, [addLog, beep])
+  }
 
   const stopVoice = useCallback(() => {
     const rec = recRef.current
