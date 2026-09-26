@@ -152,7 +152,8 @@ export function useDiscussion(roomId: string) {
       setRoles((prev) =>
         prev.map((r) => {
           if (r.id !== roleId || r.paused) return r
-          const used = r.used + cost
+          // 钳制在预算上限：并发在途请求可能把 used 推成负数（剩 -128 tok），显示与判断都不能越界
+          const used = Math.min(r.used + cost, r.budget)
           const paused = used >= r.budget
           const downshifted = r.downshifted || (r.budget - used) / r.budget < 0.2
           return { ...r, used, paused, downshifted }
@@ -374,9 +375,17 @@ export function useDiscussion(roomId: string) {
       tickCountRef.current++
       if (tickCountRef.current % 5 === 0) runModerator()
       runGovernor()
+      // 死锁自愈：所有方向都被额度调度暂停时，讨论会永久静默（用户点「继续讨论」也无效）。
+      // 自动为全体回补 30% 额度，保证讨论永远能自我续命
+      if (rolesRef.current.length > 0 && rolesRef.current.every((r) => r.paused)) {
+        setRoles((prev) => prev.map((r) => ({ ...r, used: Math.floor(r.budget * 0.3), paused: false })))
+        const text = '🧭 额度调度官：所有方向额度均已耗尽，自动回补 30% 防止讨论锁死。'
+        setDigest(text)
+        recordTimeline('governor', text)
+      }
     }, TICK_MS)
     return () => window.clearInterval(iv)
-  }, [postAI, runModerator, runGovernor])
+  }, [postAI, runModerator, runGovernor, recordTimeline])
 
   // 新房间启动：把创建时填写的议题抛给所有 AI 方向，保证「讨论你提出的问题」
   // 判定条件用「还没有人类消息」而非「无存档」，老房间升级后也能补启动
@@ -784,7 +793,19 @@ export function useDiscussion(roomId: string) {
     return () => window.clearTimeout(t)
   }, [messages, spheres, roles, enginePaused, conclusions, roomId])
 
-  const toggleEngine = useCallback(() => setEnginePaused((p) => !p), [])
+  /** 继续讨论 = 主持人重整额度：解除全部「待批准」并回补 40%，讨论立刻复活 */
+  const toggleEngine = useCallback(() => {
+    const next = !enginePausedRef.current
+    if (next) {
+      setRoles((prev) =>
+        prev.map((r) => (r.paused ? { ...r, used: Math.floor(r.budget * 0.4), paused: false, downshifted: false } : r)),
+      )
+      const text = '🧭 主持人：讨论继续。已为所有方向重整 40% 额度并解除待批准状态。'
+      setDigest(text)
+      recordTimeline('moderator', text)
+    }
+    setEnginePaused(next)
+  }, [recordTimeline])
 
   return {
     mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument,
