@@ -93,6 +93,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
   const recRef = useRef<SpeechRecognitionLike | null>(null)
   const grabRef = useRef<{ el: HTMLElement; pan: boolean } | null>(null)
   const lastFistRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false })
+  const lastBackRef = useRef(false)
   const swingHistRef = useRef<{ left: Array<{ t: number; x: number }>; right: Array<{ t: number; x: number }> }>({
     left: [],
     right: [],
@@ -259,6 +260,8 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
     const now = performance.now()
     const tracks: Record<'left' | 'right', HandTrack> = { left: { ...EMPTY_TRACK }, right: { ...EMPTY_TRACK } }
     const tips: Partial<Record<'left' | 'right', NormalizedLandmark>> = {}
+    /** 是否手背朝向摄像头（用拇指尖 lm4 与小指根 lm17 的横向次序判定，手部过于侧向时不判） */
+    const backs: Partial<Record<'left' | 'right', boolean>> = {}
 
     landmarks.forEach((lm, i) => {
       const rawLabel = handedness[i]?.[0]?.categoryName ?? 'Right'
@@ -268,7 +271,20 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
       pushSwing(side, wx)
       tracks[side] = { gesture, x: wx, y: lm[0].y, present: true, swinging: isSwinging(side) }
       tips[side] = lm[8]
+      // 手心/手背：用户左手手心朝镜头时拇指在画面右侧（raw x 更大），手背朝镜头时相反；右手镜像
+      if (Math.abs(lm[4].x - lm[17].x) > 0.03) {
+        backs[side] = side === 'left' ? lm[4].x < lm[17].x : lm[4].x > lm[17].x
+      }
     })
+
+    // 左手手背 = 退出已打开的关键球内容（沿触发，仅在内容打开时生效）
+    const leftBack = backs.left === true
+    if (leftBack && !lastBackRef.current && gestureModeRef.current && detailOpenRef.current) {
+      onCloseDetailRef.current()
+      addLog('🖐 左手手背 → 退出关键球内容')
+      beep(392, 0.1)
+    }
+    lastBackRef.current = leftBack
 
     const tip = tips.right ?? tips.left
     const cursor = cursorRef.current
@@ -328,20 +344,14 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, detailOpen, onCloseDe
         firePointer(grabRef.current.el, 'pointermove', cx, cy, 1)
       }
 
-      // 左手握拳 = 内容面板开→关闭；关→双击打开关键球
+      // 左手握拳 = 双击打开关键球内容（退出内容用「左手手背」手势）
       const leftFist = tracks.left.gesture === 'fist'
       if (leftFist && !lastFistRef.current.left && gestureModeRef.current) {
-        if (detailOpenRef.current) {
-          onCloseDetailRef.current()
-          addLog('👊 退出关键球内容')
-          beep(392, 0.1)
-        } else {
-          const target = document.elementFromPoint(cx, cy)?.closest('[data-sphere]') as HTMLElement | null
-          if (target) {
-            void fireDoubleTap(target, cx, cy)
-            addLog(`👊 双击打开「${target.textContent?.trim().slice(0, 12) ?? '关键球'}」`)
-            beep(520, 0.1)
-          }
+        const target = document.elementFromPoint(cx, cy)?.closest('[data-sphere]') as HTMLElement | null
+        if (target) {
+          void fireDoubleTap(target, cx, cy)
+          addLog(`👊 双击打开「${target.textContent?.trim().slice(0, 12) ?? '关键球'}」`)
+          beep(520, 0.1)
         }
       }
       lastFistRef.current = { left: leftFist, right: rightFist }
