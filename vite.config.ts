@@ -4,9 +4,10 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { inspectAttr } from 'kimi-plugin-inspect-react'
 
-// GitHub Pages 部署在 /SynapseBrain/ 子路径：GH_PAGES=1 npm run build 时切换 base，
-// 使资源引用与路由 basename 都带上子路径；本地开发保持 './' 不变
-const ghPages = process.env.GH_PAGES === '1'
+// GitHub Pages 部署在 /SynapseBrain/ 子路径：npm run deploy 或 GH_PAGES=1 npm run build 时切换 base，
+// 使资源引用与路由 basename 都带上子路径；本地开发保持 './' 不变。
+// npm run deploy 场景用 npm_lifecycle_event 识别（Windows 下 npm script 无法使用 KEY=VAL 前缀语法）
+const ghPages = process.env.GH_PAGES === '1' || process.env.npm_lifecycle_event === 'deploy'
 
 // https://vite.dev/config/
 export default defineConfig({

@@ -2,17 +2,21 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { MessageSquarePlus, Orbit, Trash2 } from 'lucide-react'
+import { MessageSquarePlus, Orbit, Plug, Trash2, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { listProjects, removeProject, saveProject, type ProjectMeta } from '@/shared/storage'
+import { isLiveMode } from '@/shared/config'
 import { makeId } from '@/ai/mockData'
+import { ApiKeyDialog } from '@/components/ApiKeyDialog'
 
 export default function Home() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<ProjectMeta[]>(listProjects)
   const [name, setName] = useState('')
   const [topic, setTopic] = useState('')
+  const [apiDialogOpen, setApiDialogOpen] = useState(false)
+  const live = isLiveMode()
 
   const refresh = () => setProjects(listProjects())
 
@@ -51,9 +55,23 @@ export default function Home() {
             </h1>
           </div>
           <p className="pl-1 text-sm text-slate-500">每个项目一块独立画布，多 AI 分方向讨论，互不混淆</p>
-          <a href="/lab" className="mt-2 inline-block pl-1 text-xs text-slate-600 underline decoration-dotted transition-colors hover:text-slate-300">
-            🧪 手势 & 语音实验室（测试页）
-          </a>
+          <div className="mt-2 flex items-center gap-3 pl-1">
+            <a href="/lab" className="text-xs text-slate-600 underline decoration-dotted transition-colors hover:text-slate-300">
+              🧪 手势 & 语音实验室（测试页）
+            </a>
+            <button
+              onClick={() => setApiDialogOpen(true)}
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                live
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'border-white/15 bg-white/5 text-slate-400 hover:border-white/30 hover:text-slate-200'
+              }`}
+              title={live ? '已接入 Kimi 实时模式，点击管理或清除' : '填入 Kimi API Key，从演示模式切换为真实模型'}
+            >
+              {live ? <Zap className="h-3 w-3" /> : <Plug className="h-3 w-3" />}
+              {live ? 'Kimi 实时模式' : '接入 API'}
+            </button>
+          </div>
         </header>
 
         {/* 创建新项目 */}
@@ -119,6 +137,7 @@ export default function Home() {
           </div>
         )}
       </div>
+      <ApiKeyDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />
     </div>
   )
 }

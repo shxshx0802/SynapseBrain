@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowLeft, FileDown, Gauge, History, LayoutGrid, Orbit, Pause, Play, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, FileDown, Gauge, History, LayoutGrid, Orbit, Pause, Play, Plug, Sparkles, X, Zap } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -10,6 +10,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { DiscussionPanel } from '@/components/DiscussionPanel'
 import { GestureVoiceDock } from '@/components/GestureVoiceDock'
 import { SphereDetail } from '@/components/SphereDetail'
+import { ApiKeyDialog } from '@/components/ApiKeyDialog'
 import { useDiscussion } from '@/hooks/useDiscussion'
 import { getProject } from '@/shared/storage'
 
@@ -31,6 +32,7 @@ export default function Room() {
   const [replayPlaying, setReplayPlaying] = useState(false)
   const [fatal, setFatal] = useState<string | null>(null)
   const [lastCrash, setLastCrash] = useState<string | null>(null)
+  const [apiDialogOpen, setApiDialogOpen] = useState(false)
   const project = getProject(id)
 
   /** 崩溃自检：心跳标记 + 全局异常捕获 + 上次会话异常退出检测。
@@ -189,11 +191,31 @@ export default function Room() {
               )}
             </h1>
             <p className="mt-0.5 text-[11px] leading-tight text-slate-500">
-              {mode === 'live' ? 'Kimi 实时模式' : '演示模式（配置 VITE_MOONSHOT_API_KEY 接入真模型）'}
+              {mode === 'live' ? 'Kimi 实时模式' : (
+                <>
+                  演示模式（
+                  <button className="underline decoration-dotted transition-colors hover:text-slate-300" onClick={() => setApiDialogOpen(true)}>
+                    点「接入 API」使用真实模型
+                  </button>
+                  ）
+                </>
+              )}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className={`h-8 gap-1.5 rounded-lg border-white/15 bg-black/50 text-xs hover:bg-white/10 ${
+              mode === 'live' ? 'border-emerald-500/40 text-emerald-300 hover:text-emerald-200' : ''
+            }`}
+            onClick={() => setApiDialogOpen(true)}
+            title={mode === 'live' ? '已接入 Kimi 实时模式，点击管理或清除' : '填入 Kimi API Key，从演示模式切换为真实模型'}
+          >
+            {mode === 'live' ? <Zap className="h-3.5 w-3.5" /> : <Plug className="h-3.5 w-3.5" />}
+            {mode === 'live' ? '已接入' : '接入 API'}
+          </Button>
           <span className="mr-1 text-[11px] text-slate-500">{roles.filter((r) => !r.paused).length + 1} 位参与者在线</span>
           <Button
             size="sm"
@@ -449,6 +471,8 @@ export default function Room() {
               </p>
             </div>
           )}
+
+          <ApiKeyDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />
         </div>
       </div>
     </div>
