@@ -132,6 +132,8 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
   const cursorPosRef = useRef<{ x: number; y: number } | null>(null)
   const errCountRef = useRef(0)
   const voiceFailsRef = useRef(0)
+  /** 语音 onend 自动重启的挂起定时器：卸载/停止时必须清掉，否则定时器在卸载后触发 rec.start 会造成状态错乱 */
+  const voiceRestartTimerRef = useRef(0)
   const swapHandsRef = useRef(false)
   const statusTimerRef = useRef(0)
   const gestureModeRef = useRef(false)
@@ -554,7 +556,10 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
           addLog('🎙️ 语音连续失败已停止，可重点「启动语音」重试')
           return
         }
-        window.setTimeout(() => {
+        // 自动重启前先清掉上一个挂起的重启定时器，防止 onend 频繁触发时多个定时器叠加
+        window.clearTimeout(voiceRestartTimerRef.current)
+        voiceRestartTimerRef.current = window.setTimeout(() => {
+          voiceRestartTimerRef.current = 0
           if (recRef.current !== rec) return
           try {
             rec.start()
@@ -597,6 +602,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
   }, [onCloseDetail])
 
   const stopVoice = useCallback(() => {
+    window.clearTimeout(voiceRestartTimerRef.current)
     const rec = recRef.current
     recRef.current = null
     if (rec) rec.abort()
@@ -607,6 +613,8 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
     () => () => {
       cancelAnimationFrame(rafRef.current)
       streamRef.current?.getTracks().forEach((t) => t.stop())
+      // 关键：清掉挂起的语音重启定时器，阻止卸载后对旧 recognition 调 start
+      window.clearTimeout(voiceRestartTimerRef.current)
       recRef.current?.abort()
     },
     [],
@@ -628,7 +636,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
           <span className="ml-1 text-xs font-medium text-slate-300">手势 & 语音</span>
           {gestureMode && <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300">已唤醒</span>}
           <button className="ml-auto text-slate-500 hover:text-slate-300" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            {expanded ? <ChevronDown key="chev-down" className="h-4 w-4" /> : <ChevronUp key="chev-up" className="h-4 w-4" />}
           </button>
         </div>
 
@@ -642,11 +650,11 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
                 disabled={camBusy}
                 onClick={() => (camOn ? stopVideo() : void startVideo())}
               >
-                {camOn ? <VideoOff className="mr-1 h-3 w-3" /> : <Video className="mr-1 h-3 w-3" />}
+                {camOn ? <VideoOff key="video-off" className="mr-1 h-3 w-3" /> : <Video key="video-on" className="mr-1 h-3 w-3" />}
                 {camBusy ? '启动中…' : camOn ? '停手势' : '启手势'}
               </Button>
               <Button size="sm" variant="outline" className="h-7 flex-1 text-xs" onClick={() => (voiceOn ? stopVoice() : void startVoice())}>
-                {voiceOn ? <MicOff className="mr-1 h-3 w-3" /> : <Mic className="mr-1 h-3 w-3" />}
+                {voiceOn ? <MicOff key="mic-off" className="mr-1 h-3 w-3" /> : <Mic key="mic-on" className="mr-1 h-3 w-3" />}
                 {voiceOn ? '停语音' : '启语音'}
               </Button>
               <Button size="sm" variant={swapHands ? 'default' : 'outline'} className="h-7 px-2 text-xs" onClick={() => setSwapHands((v) => !v)}>

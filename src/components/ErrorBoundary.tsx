@@ -4,8 +4,15 @@ interface State {
   error: Error | null
 }
 
-/** 全局渲染错误边界：任何 React 渲染异常都显示为可见的错误卡片，而不是黑屏 */
-export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
+interface Props {
+  children: ReactNode
+  /** 自定义兜底视图；不传则使用全屏兜底 */
+  fallback?: (error: Error, retry: () => void) => ReactNode
+}
+
+/** 渲染错误边界：任何 React 渲染异常都显示为可见的错误界面，而不是黑屏。
+    支持局部边界（自定义 fallback 只替换出错的子树）与全局边界（默认全屏兜底） */
+export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null }
 
   static getDerivedStateFromError(error: Error): State {
@@ -22,8 +29,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     }
   }
 
+  retry = () => this.setState({ error: null })
+
   render() {
     if (this.state.error) {
+      if (this.props.fallback) return this.props.fallback(this.state.error, this.retry)
       return (
         <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-black p-8 text-center">
           <p className="text-lg font-bold text-white">页面渲染出错（已被错误边界拦截，没有黑屏）</p>

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CanvasBoard } from '@/components/CanvasBoard'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { DiscussionPanel } from '@/components/DiscussionPanel'
 import { GestureVoiceDock } from '@/components/GestureVoiceDock'
 import { SphereDetail } from '@/components/SphereDetail'
@@ -392,14 +393,25 @@ export default function Room() {
               onClose={() => setInspectId(null)}
             />
           )}
-          <GestureVoiceDock
-            onZoom={handleGestureZoom}
-            onVoiceCommand={sendHuman}
-            onVoiceControl={handleVoiceControl}
-            onTilt={(rx, ry) => setTilt({ rx, ry })}
-            detailOpen={!!inspectSphere}
-            onCloseDetail={() => setInspectId(null)}
-          />
+          {/* 局部错误边界：手势/语音面板崩了只换掉面板本身，画布与讨论绝不受影响（不再整页黑屏） */}
+          <ErrorBoundary
+            fallback={(_err, retry) => (
+              <div className="fixed bottom-4 right-4 z-40 w-64 rounded-xl border border-red-500/50 bg-black/95 p-3 shadow-2xl backdrop-blur">
+                <p className="text-xs font-bold text-red-400">手势语音面板出错（页面未黑屏）</p>
+                <p className="mt-1 max-h-16 overflow-y-auto font-mono text-[10px] break-all text-slate-500">{String(_err.message || _err)}</p>
+                <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={retry}>重载面板</Button>
+              </div>
+            )}
+          >
+            <GestureVoiceDock
+              onZoom={handleGestureZoom}
+              onVoiceCommand={sendHuman}
+              onVoiceControl={handleVoiceControl}
+              onTilt={(rx, ry) => setTilt({ rx, ry })}
+              detailOpen={!!inspectSphere}
+              onCloseDetail={() => setInspectId(null)}
+            />
+          </ErrorBoundary>
 
           {/* 崩溃自检：捕获到未处理异常时显示错误卡，代替整页黑屏 */}
           {fatal && (
