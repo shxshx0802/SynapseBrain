@@ -223,8 +223,9 @@ export default function GestureLab() {
   const ensureLandmarker = async () => {
     if (landmarkerRef.current) return
     const vision = await FilesetResolver.forVisionTasks('/mp/wasm')
+    // CPU 推理：部分显卡驱动下 GPU 推理（WebGL）与画布绘制并存会崩 GPU 进程导致整页黑屏
     landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: '/mp/hand_landmarker.task', delegate: 'GPU' },
+      baseOptions: { modelAssetPath: '/mp/hand_landmarker.task', delegate: 'CPU' },
       runningMode: 'VIDEO',
       numHands: 2,
       minHandDetectionConfidence: 0.5,
@@ -250,7 +251,7 @@ export default function GestureLab() {
     try {
       await ensureLandmarker()
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' },
+        video: { width: 480, height: 360, facingMode: 'user' },
         audio: false,
       })
       streamRef.current = stream
