@@ -28,7 +28,58 @@ export default function Room() {
   const [showConclusions, setShowConclusions] = useState(false)
   const [replayIdx, setReplayIdx] = useState<number | null>(null)
   const [replayPlaying, setReplayPlaying] = useState(false)
+  const [fatal, setFatal] = useState<string | null>(null)
+  const [lastCrash, setLastCrash] = useState<string | null>(null)
   const project = getProject(id)
+
+  /** 崩溃自检：心跳标记 + 全局异常捕获 + 上次会话异常退出检测。
+      目的：把「点击按钮后整页黑屏」从不可见故障变成可见错误卡/可上报记录 */
+  useEffect(() => {
+    const ERR_KEY = 'ks-errors'
+    const ALIVE_KEY = 'ks-alive'
+    const CLEAN_KEY = 'ks-clean-exit'
+    try {
+      const aliveRaw = localStorage.getItem(ALIVE_KEY)
+      const clean = localStorage.getItem(CLEAN_KEY)
+      const errsRaw = localStorage.getItem(ERR_KEY)
+      if (aliveRaw && !clean) {
+        const age = Date.now() - Number(aliveRaw)
+        const errs = errsRaw ? (JSON.parse(errsRaw) as { t: number; msg: string }[]) : []
+        if (age > 15000 && errs.length > 0) {
+          const last = errs[errs.length - 1]
+          setLastCrash(`${new Date(last.t).toLocaleTimeString()} — ${last.msg}`)
+        }
+      }
+    } catch { /* 存储不可用时静默 */ }
+    localStorage.removeItem(ERR_KEY)
+    localStorage.removeItem(CLEAN_KEY)
+
+    const pushError = (msg: string) => {
+      try {
+        const list = JSON.parse(localStorage.getItem(ERR_KEY) ?? '[]') as { t: number; msg: string }[]
+        list.push({ t: Date.now(), msg })
+        localStorage.setItem(ERR_KEY, JSON.stringify(list.slice(-10)))
+      } catch { /* ignore */ }
+      setFatal(msg)
+    }
+    const onError = (e: ErrorEvent) => pushError(e.message || String(e.error))
+    const onRejection = (e: PromiseRejectionEvent) => pushError(`Promise 拒绝：${String(e.reason).slice(0, 200)}`)
+    const onCleanExit = () => {
+      try { localStorage.setItem(CLEAN_KEY, '1') } catch { /* ignore */ }
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    window.addEventListener('beforeunload', onCleanExit)
+    const hb = window.setInterval(() => {
+      try { localStorage.setItem(ALIVE_KEY, String(Date.now())) } catch { /* ignore */ }
+    }, 3000)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+      window.removeEventListener('beforeunload', onCleanExit)
+      window.clearInterval(hb)
+    }
+  }, [])
 
   const handleLayout = () => {
     const bounds = layoutSpheres()
@@ -349,6 +400,43 @@ export default function Room() {
             detailOpen={!!inspectSphere}
             onCloseDetail={() => setInspectId(null)}
           />
+
+          {/* 崩溃自检：捕获到未处理异常时显示错误卡，代替整页黑屏 */}
+          {fatal && (
+            <div className="fixed top-4 left-1/2 z-[100] w-[min(560px,92%)] -translate-x-1/2 rounded-2xl border border-red-500/50 bg-black/95 p-4 shadow-2xl backdrop-blur">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-sm font-bold text-red-400">捕获到页面异常（已阻止黑屏）</span>
+                <button className="text-slate-500 hover:text-slate-300" onClick={() => setFatal(null)}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="max-h-28 overflow-y-auto font-mono text-[11px] leading-relaxed break-all text-red-300/90">{fatal}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2.5 h-7 text-xs"
+                onClick={() => { setFatal(null); window.location.reload() }}
+              >
+                刷新页面恢复
+              </Button>
+            </div>
+          )}
+
+          {/* 上次会话异常退出提示（刷新后可见） */}
+          {lastCrash && (
+            <div className="fixed bottom-4 left-1/2 z-[100] w-[min(560px,92%)] -translate-x-1/2 rounded-2xl border border-amber-500/50 bg-black/95 p-4 shadow-2xl backdrop-blur">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-sm font-bold text-amber-400">检测到上次会话异常退出（黑屏崩溃）</span>
+                <button className="text-slate-500 hover:text-slate-300" onClick={() => setLastCrash(null)}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="max-h-28 overflow-y-auto font-mono text-[11px] leading-relaxed break-all text-amber-200/90">{lastCrash}</p>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                请把这段内容发给开发者，即可定位黑屏根源。
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

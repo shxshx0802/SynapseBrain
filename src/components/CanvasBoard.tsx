@@ -54,7 +54,22 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       fxCanvas 不带滤镜画光波/脉冲（goo 滤镜会把细线的 alpha 二值化滤掉，光波必须画在滤镜外） */
   useEffect(() => {
     let raf = 0
+    let drawErrCount = 0
     const draw = () => {
+      // 关键自愈点 1：先把下一帧排进队列，再画。绘制体一旦抛异常，
+      // rAF 链条不会断（原先在末尾调度，单帧异常 → 链条死亡 → 画布冻黑屏）
+      raf = requestAnimationFrame(draw)
+      try {
+        drawBody()
+      } catch (e) {
+        drawErrCount++
+        // 首次 + 之后每 60 次记录一次，避免刷爆控制台
+        if (drawErrCount === 1 || drawErrCount % 60 === 0) {
+          console.warn('[KeySphere] 画布绘制异常已自愈（未中断渲染循环）', e)
+        }
+      }
+    }
+    const drawBody = () => {
       const canvas = canvasRef.current
       const fxCanvas = fxCanvasRef.current
       const container = containerRef.current
@@ -165,10 +180,30 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
           }
         }
       }
-      raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
+    // 关键自愈点 2：GPU 上下文丢失（驱动崩溃/内存压力）时标记可恢复，
+    // 浏览器会自动触发 contextrestored，绘制每帧都会重设 transform，无需额外重建
+    const onLost = (e: Event) => {
+      e.preventDefault()
+      console.warn('[KeySphere] 画布 GPU 上下文丢失，等待浏览器自动恢复…')
+    }
+    const onRestored = () => {
+      console.warn('[KeySphere] 画布 GPU 上下文已恢复')
+    }
+    const canvasEl = canvasRef.current
+    const fxEl = fxCanvasRef.current
+    canvasEl?.addEventListener('contextlost', onLost)
+    canvasEl?.addEventListener('contextrestored', onRestored)
+    fxEl?.addEventListener('contextlost', onLost)
+    fxEl?.addEventListener('contextrestored', onRestored)
+    return () => {
+      cancelAnimationFrame(raf)
+      canvasEl?.removeEventListener('contextlost', onLost)
+      canvasEl?.removeEventListener('contextrestored', onRestored)
+      fxEl?.removeEventListener('contextlost', onLost)
+      fxEl?.removeEventListener('contextrestored', onRestored)
+    }
   }, [reduceMotion])
 
   /** 整理布局后自动取景：缩放平移到能看见整个环形布局 */
