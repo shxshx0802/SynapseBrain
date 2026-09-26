@@ -1,0 +1,217 @@
+pageType: content
+background:
+  type: solid
+  color: "#0D1117"
+elements:
+  - elementId: label
+    elementType: text
+    bounds: [72, 44, 360, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">VALUE & ROADMAP · 12</p>
+      wrap: true
+      align: [left, middle]
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [72, 76, 600, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">价值与展望</p>
+      wrap: true
+      align: [left, middle]
+      style: $text9
+  - elementId: colL
+    elementType: text
+    bounds: [72, 140, 200, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">价值</p>
+      wrap: true
+      align: [left, middle]
+      style: $text13
+  - elementId: colR
+    elementType: text
+    bounds: [516, 140, 200, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">展望</p>
+      wrap: true
+      align: [left, middle]
+      style: $text13
+  - elementId: v1n
+    elementType: text
+    bounds: [72, 186, 50, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">01</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: v1t
+    elementType: text
+    bounds: [128, 188, 340, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">讨论到决策，一条链路</p>
+      wrap: true
+      align: [left, middle]
+      style: $text14
+  - elementId: v1d
+    elementType: text
+    bounds: [128, 218, 340, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">收敛结论 + 一键导出报告，讨论结束即有可交付的决策记录</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: v2n
+    elementType: text
+    bounds: [72, 280, 50, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">02</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: v2t
+    elementType: text
+    bounds: [128, 282, 340, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">隔空控场，人人都是主持人</p>
+      wrap: true
+      align: [left, middle]
+      style: $text14
+  - elementId: v2d
+    elementType: text
+    bounds: [128, 312, 340, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">手势与语音让演讲者离开键鼠也能驱动全场，参与门槛降到最低</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: v3n
+    elementType: text
+    bounds: [72, 374, 50, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">03</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: v3t
+    elementType: text
+    bounds: [128, 376, 340, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">零门槛，浏览器即用</p>
+      wrap: true
+      align: [left, middle]
+      style: $text14
+  - elementId: v3d
+    elementType: text
+    bounds: [128, 406, 340, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">纯软件、免安装；演示模式不配置 API 也能完整体验全部功能</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: mid
+    elementType: shape
+    bounds: [478, 150, 1, 300]
+    shapeName: straightConnector1
+    border: {style: solid, width: 1, color: "#2A3A3A"}
+  - elementId: r1n
+    elementType: text
+    bounds: [516, 186, 50, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">01</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: r1t
+    elementType: text
+    bounds: [572, 188, 340, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">多人实时协同房间</p>
+      wrap: true
+      align: [left, middle]
+      style: $text14
+  - elementId: r1d
+    elementType: text
+    bounds: [572, 218, 340, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">接入 WebSocket 同步后，异地参与者共享同一块画布与讨论流</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: r2n
+    elementType: text
+    bounds: [516, 280, 50, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">02</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: r2t
+    elementType: text
+    bounds: [572, 282, 340, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">模型插件化</p>
+      wrap: true
+      align: [left, middle]
+      style: $text14
+  - elementId: r2d
+    elementType: text
+    bounds: [572, 312, 340, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">统一 ChatProvider 接口，接入更多模型只需实现一个方法</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: r3n
+    elementType: text
+    bounds: [516, 374, 50, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">03</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: r3t
+    elementType: text
+    bounds: [572, 376, 340, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">多模态与多端</p>
+      wrap: true
+      align: [left, middle]
+      style: $text14
+  - elementId: r3d
+    elementType: text
+    bounds: [572, 406, 340, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">深化图片/文档理解，适配移动端与投屏、头显等大屏幕场景</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: repo
+    elementType: text
+    bounds: [72, 470, 816, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">开源地址：github.com/shxshx0802/SynapseBrain</p>
+      wrap: true
+      align: [left, middle]
+      style: $text8

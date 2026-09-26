@@ -1,0 +1,85 @@
+pageType: content
+background:
+  type: solid
+  color: "#0D1117"
+elements:
+  - elementId: bg
+    elementType: image
+    bounds: [0, 0, 960, 540]
+    src: media/cover-bg.jpg
+    fit:
+      mode: fill
+  - elementId: bg-mask
+    elementType: shape
+    bounds: [0, 0, 960, 540]
+    shapeName: roundRect
+    adjustments: [0]
+    fill:
+      type: gradient
+      gradientType: linear
+      stops:
+        - position: 0
+          color: "#0D1117F0"
+        - position: 0.52
+          color: "#0D11179E"
+        - position: 1
+          color: "#0D111733"
+      angle: 0
+  - elementId: title
+    elementType: text
+    bounds: [72, 138, 640, 130]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">SynapseBrain</p>
+      color: "#F2F7F7"
+      fontSize: 62
+      bold: true
+      fontFamily: Noto Sans SC, Noto Sans SC
+      lineHeight: 1.25
+      wrap: true
+      align: [left, middle]
+  - elementId: subtitle
+    elementType: text
+    bounds: [78, 252, 620, 56]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">多 AI 协同讨论画布</p>
+      color: "#5EEAD4"
+      fontSize: 30
+      bold: true
+      fontFamily: Noto Sans SC, Noto Sans SC
+      lineHeight: 1.25
+      wrap: true
+      align: [left, middle]
+  - elementId: tagline
+    elementType: text
+    bounds: [78, 330, 700, 76]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.33; margin-left: 0px;">多 AI 群智讨论 · 关键球可视化 · 手势语音控场 · 额度治理</p>
+      color: "#C6D2D2"
+      fontSize: 17
+      fontFamily: Noto Sans SC, Noto Sans SC
+      lineHeight: 1.33
+      wrap: true
+      align: [left, middle]
+  - elementId: line
+    elementType: shape
+    bounds: [78, 437, 138, 1]
+    shapeName: straightConnector1
+    border:
+      style: solid
+      width: 2
+      color: "#5EEAD4"
+  - elementId: footer
+    elementType: text
+    bounds: [78, 458, 560, 36]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">产品总结 · 功能与技术实现 · 2026</p>
+      color: "#8BA3A8"
+      fontSize: 13
+      fontFamily: Inter, Inter
+      lineHeight: 1.25
+      wrap: true
+      align: [left, middle]

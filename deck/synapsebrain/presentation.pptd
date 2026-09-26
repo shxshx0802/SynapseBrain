@@ -1,0 +1,172 @@
+version: v2
+title: SynapseBrain 产品总结
+theme:
+  colors:
+    dk1: "#000000"
+    lt1: "#FFFFFF"
+    dk2: "#44546A"
+    lt2: "#E7E6E6"
+    accent1: "#4472C4"
+    accent2: "#ED7D31"
+    accent3: "#A5A5A5"
+    accent4: "#FFC000"
+    accent5: "#5B9BD5"
+    accent6: "#70AD47"
+    hlink: "#0563C1"
+    folHlink: "#954F72"
+  textStyles:
+    text1:
+      color: "#8BA3A8"
+      fontSize: 12
+      fontFamily: Inter, Inter
+      bold: false
+      italic: false
+      lineHeight: 1.25
+    text2:
+      color: "#5EEAD4"
+      fontSize: 26
+      fontFamily: Inter, Inter
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text3:
+      color: "#F2F7F7"
+      fontSize: 14
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text4:
+      color: "#8BA3A8"
+      fontSize: 11
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: false
+      italic: false
+      lineHeight: 1.25
+    text5:
+      color: "#8BA3A8"
+      fontSize: 13
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: false
+      italic: false
+      lineHeight: 1.25
+    text6:
+      color: "#5EEAD4"
+      fontSize: 30
+      fontFamily: Inter, Inter
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text7:
+      color: "#F2F7F7"
+      fontSize: 21
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text8:
+      color: "#8BA3A8"
+      fontSize: 14
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: false
+      italic: false
+      lineHeight: 1.25
+    text9:
+      color: "#F2F7F7"
+      fontSize: 30
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text10:
+      color: "#F2F7F7"
+      fontSize: 15
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text11:
+      color: "#F2F7F7"
+      fontSize: 16
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text12:
+      color: "#8BA3A8"
+      fontSize: 12
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: false
+      italic: false
+      lineHeight: 1.25
+    text13:
+      color: "#5EEAD4"
+      fontSize: 13
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text14:
+      color: "#F2F7F7"
+      fontSize: 13
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text15:
+      color: "#F2F7F7"
+      fontSize: 18
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: true
+      italic: false
+      lineHeight: 1.25
+    text16:
+      color: "#8BA3A8"
+      fontSize: 13
+      fontFamily: Noto Sans SC, Noto Sans SC
+      bold: false
+      italic: false
+      lineHeight: 1.33
+    text17:
+      color: "#5EEAD4"
+      fontSize: 22
+      fontFamily: Inter, Inter
+      bold: true
+      italic: false
+      lineHeight: 1.25
+  tableStyles:
+    table1:
+      cellStyle:
+        fontFamily: Noto Sans SC, Noto Sans SC
+        italic: false
+        lineHeight: 1
+        border: null
+      firstRowStyle:
+        fontSize: 13
+        bold: true
+        align:
+          - center
+          - top
+      firstColumnStyle:
+        color: "#F2F7F7"
+        fontSize: 12
+        bold: true
+        align:
+          - center
+          - top
+      rowOverColumn: true
+size: [960, 540]
+pages:
+  - pages/page-1.page
+  - pages/page-2.page
+  - pages/page-3.page
+  - pages/page-4.page
+  - pages/page-5.page
+  - pages/page-6.page
+  - pages/page-7.page
+  - pages/page-8.page
+  - pages/page-9.page
+  - pages/page-10.page
+  - pages/page-11.page
+  - pages/page-12.page
+  - pages/page-13.page

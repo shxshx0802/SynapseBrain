@@ -1,0 +1,144 @@
+pageType: content
+background:
+  type: solid
+  color: "#0D1117"
+elements:
+  - elementId: label
+    elementType: text
+    bounds: [72, 44, 320, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">KEYBALLS · 05</p>
+      wrap: true
+      align: [left, middle]
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [72, 76, 700, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">关键球：把讨论变成可触摸的洞察</p>
+      wrap: true
+      align: [left, middle]
+      style: $text9
+  - elementId: shot
+    elementType: image
+    bounds: [60, 132, 460, 340]
+    src: media/canvas.png
+    fit:
+      mode: fill
+  - elementId: shot-border
+    elementType: shape
+    bounds: [60, 132, 460, 340]
+    shapeName: roundRect
+    adjustments: [0.03]
+    fill: {type: solid, color: "#00000000"}
+    border: {style: solid, width: 1, color: "#2A3A3A"}
+  - elementId: n1
+    elementType: text
+    bounds: [556, 140, 60, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">01</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: t1
+    elementType: text
+    bounds: [622, 142, 300, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">讨论中自动生成</p>
+      wrap: true
+      align: [left, middle]
+      style: $text10
+  - elementId: d1
+    elementType: text
+    bounds: [622, 174, 300, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.33; margin-left: 0px;">AI 每轮发言提炼最值得沉淀的概念；出生点黄金角螺旋搜索，不与任何旧球重叠</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: n2
+    elementType: text
+    bounds: [556, 226, 60, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">02</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: t2
+    elementType: text
+    bounds: [622, 228, 300, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">待机阵阵白色光波</p>
+      wrap: true
+      align: [left, middle]
+      style: $text10
+  - elementId: d2
+    elementType: text
+    bounds: [622, 260, 300, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.33; margin-left: 0px;">灰球在黑底画布上发出双重错峰涟漪；拼接时更亮更快，一眼锁定焦点</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: n3
+    elementType: text
+    bounds: [556, 312, 60, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">03</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: t3
+    elementType: text
+    bounds: [622, 314, 300, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">靠近即融球</p>
+      wrap: true
+      align: [left, middle]
+      style: $text10
+  - elementId: d3
+    elementType: text
+    bounds: [622, 346, 300, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.33; margin-left: 0px;">两球靠近：goo 滤镜融球桥接 + 光波加密 + 轻微震动，AI 说出两者的关系</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: n4
+    elementType: text
+    bounds: [556, 398, 60, 40]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">04</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: t4
+    elementType: text
+    bounds: [622, 400, 300, 30]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">一键整理布局</p>
+      wrap: true
+      align: [left, middle]
+      style: $text10
+  - elementId: d4
+    elementType: text
+    bounds: [622, 432, 300, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.33; margin-left: 0px;">同心环形层层递进并自动取景；双击球看完整生成过程与讨论线程</p>
+      wrap: true
+      align: [left, top]
+      style: $text12

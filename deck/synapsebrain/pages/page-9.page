@@ -1,0 +1,159 @@
+pageType: content
+background:
+  type: solid
+  color: "#0D1117"
+elements:
+  - elementId: label
+    elementType: text
+    bounds: [72, 44, 280, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">CRAFT · 09</p>
+      wrap: true
+      align: [left, middle]
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [72, 76, 780, 44]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">关键实现：四个支撑体验的技术决策</p>
+      wrap: true
+      align: [left, middle]
+      style: $text9
+  - elementId: c1
+    elementType: shape
+    bounds: [72, 148, 400, 150]
+    shapeName: roundRect
+    adjustments: [0.06]
+    fill: {type: solid, color: "#182020"}
+    border: {style: solid, width: 1, color: "#2A3A3A"}
+  - elementId: c1n
+    elementType: text
+    bounds: [92, 166, 60, 32]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">01</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: c1t
+    elementType: text
+    bounds: [92, 204, 360, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">MediaPipe CPU 推理 · 480×360</p>
+      wrap: true
+      align: [left, middle]
+      style: $text15
+  - elementId: c1d
+    elementType: text
+    bounds: [92, 238, 360, 48]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">显式关闭 GPU 推理，规避部分显卡驱动崩溃；帧去重 + 结果防抖，手势稳而不飘</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: c2
+    elementType: shape
+    bounds: [496, 148, 400, 150]
+    shapeName: roundRect
+    adjustments: [0.06]
+    fill: {type: solid, color: "#182020"}
+    border: {style: solid, width: 1, color: "#2A3A3A"}
+  - elementId: c2n
+    elementType: text
+    bounds: [516, 166, 60, 32]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">02</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: c2t
+    elementType: text
+    bounds: [516, 204, 360, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">双层 canvas 分离渲染</p>
+      wrap: true
+      align: [left, middle]
+      style: $text15
+  - elementId: c2d
+    elementType: text
+    bounds: [516, 238, 360, 48]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">goo 滤镜层只画球体与融球桥接，独立层画光波细线——避免滤镜把透明细线二值化吃掉</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: c3
+    elementType: shape
+    bounds: [72, 322, 400, 150]
+    shapeName: roundRect
+    adjustments: [0.06]
+    fill: {type: solid, color: "#182020"}
+    border: {style: solid, width: 1, color: "#2A3A3A"}
+  - elementId: c3n
+    elementType: text
+    bounds: [92, 340, 60, 32]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">03</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: c3t
+    elementType: text
+    bounds: [92, 378, 360, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">合成 PointerEvent 复用鼠标链路</p>
+      wrap: true
+      align: [left, middle]
+      style: $text15
+  - elementId: c3d
+    elementType: text
+    bounds: [92, 412, 360, 48]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">手势不另写一套交互：向关键球派发合成指针事件，拖动/抓取/双击与鼠标零分叉</p>
+      wrap: true
+      align: [left, top]
+      style: $text12
+  - elementId: c4
+    elementType: shape
+    bounds: [496, 322, 400, 150]
+    shapeName: roundRect
+    adjustments: [0.06]
+    fill: {type: solid, color: "#182020"}
+    border: {style: solid, width: 1, color: "#2A3A3A"}
+  - elementId: c4n
+    elementType: text
+    bounds: [516, 340, 60, 32]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">04</p>
+      wrap: true
+      align: [left, middle]
+      style: $text17
+  - elementId: c4t
+    elementType: text
+    bounds: [516, 378, 360, 28]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.25; margin-left: 0px;">确定性布局与稳定簇 ID</p>
+      wrap: true
+      align: [left, middle]
+      style: $text15
+  - elementId: c4d
+    elementType: text
+    bounds: [516, 412, 360, 48]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.4; margin-left: 0px;">新球黄金角螺旋找空位保证不重叠；结论簇 ID 由成员决定，刷新不重建不闪动</p>
+      wrap: true
+      align: [left, top]
+      style: $text12

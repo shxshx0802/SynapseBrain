@@ -29,3 +29,6 @@ dist-ssr
 !.env.example
 
 data/
+
+# 模板分析与中间产物
+references/
