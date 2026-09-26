@@ -112,7 +112,8 @@ export default function GestureLab() {
   const voiceActiveRef = useRef(false)
   const voiceDeadlineRef = useRef(0)
   const voiceCommandRef = useRef('')
-  const mirrorRef = useRef(true)
+  /** 左右手判定是否交换（光标始终镜像跟随，此开关只交换左右手语义） */
+  const swapHandsRef = useRef(false)
   const statusTimerRef = useRef(0)
 
   const [camStatus, setCamStatus] = useState<'idle' | 'starting' | 'ready' | 'error'>('idle')
@@ -129,7 +130,7 @@ export default function GestureLab() {
   const [zoomDir, setZoomDir] = useState<'in' | 'out' | null>(null)
   const [grabLabel, setGrabLabel] = useState<string | null>(null)
   const [opened, setOpened] = useState<string | null>(null)
-  const [mirror, setMirror] = useState(true)
+  const [swapHands, setSwapHands] = useState(false)
   const [spheres, setSpheres] = useState<LabSphere[]>(INITIAL_SPHERES)
   const [log, setLog] = useState<Array<{ t: string; text: string }>>([])
 
@@ -206,6 +207,16 @@ export default function GestureLab() {
         audio: false,
       })
       streamRef.current = stream
+      // 系统中断监测：授权弹窗 / 设备占用可能把视频轨道打断，记录并提示
+      stream.getVideoTracks().forEach((t) => {
+        t.addEventListener('mute', () => addLog('⚠️ 摄像头画面中断（mute），等待恢复…'))
+        t.addEventListener('unmute', () => addLog('✅ 摄像头画面已恢复'))
+        t.addEventListener('ended', () => {
+          setCamStatus('error')
+          setCamError('摄像头被系统中断（可能因其他应用占用），请刷新页面重试')
+          addLog('❌ 摄像头轨道已结束（ended）')
+        })
+      })
       const video = videoRef.current
       if (!video) return
       video.srcObject = stream
@@ -264,10 +275,11 @@ export default function GestureLab() {
 
     landmarks.forEach((lm, i) => {
       const rawLabel = handedness[i]?.[0]?.categoryName ?? 'Right'
-      // 前置摄像头镜像显示：画面里的 "Right" 是用户的左手；可用「翻转」开关校准
-      const side: 'left' | 'right' = mirrorRef.current ? (rawLabel === 'Right' ? 'left' : 'right') : rawLabel === 'Left' ? 'left' : 'right'
+      // MediaPipe 在自拍视角下：画面里的 "Right" 是用户的左手。交换开关只翻转此映射，
+      // 光标镜像始终开启（与镜面预览一致），保证手往哪移光标就往哪移
+      const side: 'left' | 'right' = swapHandsRef.current ? (rawLabel === 'Left' ? 'left' : 'right') : rawLabel === 'Right' ? 'left' : 'right'
       const gesture = classify(lm)
-      const wx = mirrorRef.current ? 1 - lm[0].x : lm[0].x
+      const wx = 1 - lm[0].x
       pushSwing(side, wx)
       tracks[side] = { gesture, x: wx, y: lm[0].y, present: true, swinging: isSwinging(side) }
       tips[side] = lm[8]
@@ -278,7 +290,7 @@ export default function GestureLab() {
     const tip = tips.right ?? tips.left
     const cursor = cursorRef.current
     if (tip && cursor) {
-      const rawX = (mirrorRef.current ? 1 - tip.x : tip.x) * window.innerWidth
+      const rawX = (1 - tip.x) * window.innerWidth
       const rawY = tip.y * window.innerHeight
       const prev = cursorPosRef.current
       let cx = rawX
@@ -396,8 +408,8 @@ export default function GestureLab() {
     gestureModeRef.current = gestureMode
   }, [gestureMode])
   useEffect(() => {
-    mirrorRef.current = mirror
-  }, [mirror])
+    swapHandsRef.current = swapHands
+  }, [swapHands])
 
   /** 摄像头预览上绘制手部骨架 */
   const drawOverlay = (landmarks: NormalizedLandmark[][]) => {
@@ -443,8 +455,8 @@ export default function GestureLab() {
     }
   }
 
-  /** 启动语音识别 + 唤醒词「小K」 */
-  const startVoice = useCallback(() => {
+  /** 启动语音识别 + 唤醒词「小K」：先显式申请麦克风权限，再启动识别 */
+  const startVoice = useCallback(async () => {
     const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition
     if (!Ctor) {
       setVoiceSupported(false)
@@ -452,6 +464,18 @@ export default function GestureLab() {
       return
     }
     setVoiceSupported(true)
+    // 先通过 getUserMedia 显式申请麦克风权限：比 SpeechRecognition 内部申请更可控，
+    // 拿到后立即释放音轨，避免与视频轨道长期并存
+    addLog('🎙️ 正在请求麦克风权限…')
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true })
+      s.getTracks().forEach((t) => t.stop())
+      addLog('🎙️ 麦克风权限已获取')
+    } catch (err) {
+      setVoiceError('麦克风权限被拒')
+      addLog(`⚠️ 麦克风权限被拒：${err instanceof Error ? err.message : err}`)
+      return
+    }
     const rec = new Ctor()
     recRef.current = rec
     rec.lang = 'zh-CN'
@@ -666,11 +690,11 @@ export default function GestureLab() {
               )}
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setMirror((m) => !m)}>
-                <FlipHorizontal2 className="mr-1.5 h-3.5 w-3.5" /> 左右手翻转{mirror ? '（开）' : '（关）'}
+              <Button variant="outline" size="sm" onClick={() => setSwapHands((m) => !m)}>
+                <FlipHorizontal2 className="mr-1.5 h-3.5 w-3.5" /> 左右手交换{swapHands ? '（开）' : '（关）'}
               </Button>
               {camStatus === 'ready' && (
-                <span className="text-xs text-slate-500">若识别出的左右手与实际相反，点上方翻转</span>
+                <span className="text-xs text-slate-500">若识别出的左右手与实际相反，点上方交换（不影响光标移动方向）</span>
               )}
             </div>
           </div>
