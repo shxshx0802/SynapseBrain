@@ -11,6 +11,9 @@ import {
   RELATION_TEMPLATES,
   SPHERE_CONTENT_POOLS,
   SPHERE_LABEL_POOLS,
+  TOPIC_MESSAGE_POOLS,
+  TOPIC_SPHERE_CONTENT_POOLS,
+  TOPIC_SPHERE_LABEL_POOLS,
   WELCOME,
   makeId,
   relationTypeOf,
@@ -203,14 +206,17 @@ export function useDiscussion(roomId: string) {
     })
   }, [])
 
-  /** 演示模式：从预设标签池凝结关键球（附来源内容） */
+  /** 演示模式：从预设标签池凝结关键球（附来源内容）；有议题时优先凝结议题相关球 */
   const spawnSphereMock = useCallback(
     (role: AIRole) => {
       const idx = (poolIndexRef.current[role.id] = (poolIndexRef.current[role.id] ?? 0) + 1)
-      const pool = SPHERE_LABEL_POOLS[role.id]
-      const contentPool = SPHERE_CONTENT_POOLS[role.id]
-      const label = pool[idx % pool.length]
-      addSphere(role, label, contentPool[idx % contentPool.length])
+      const topic = topicRef.current
+      const useTopic = !!topic && idx % 2 === 0 // 有议题时隔一颗凝一颗议题球
+      const pool = useTopic ? TOPIC_SPHERE_LABEL_POOLS[role.id] : SPHERE_LABEL_POOLS[role.id]
+      const contentPool = useTopic ? TOPIC_SPHERE_CONTENT_POOLS[role.id] : SPHERE_CONTENT_POOLS[role.id]
+      const label = pool[idx % pool.length].replaceAll('{topic}', (topic ?? '').slice(0, 10))
+      const content = contentPool[idx % contentPool.length].replaceAll('{topic}', topic ?? '')
+      addSphere(role, label, content)
       recordTimeline('sphere', `💠 ${role.name} 凝结关键球「${label}」`)
     },
     [addSphere, recordTimeline],
@@ -260,10 +266,14 @@ export function useDiscussion(roomId: string) {
       if (!active.length) return
       const role = active[Math.floor(Math.random() * active.length)]
       const idx = (poolIndexRef.current[role.id] = (poolIndexRef.current[role.id] ?? 0) + 1)
-      const pool = MESSAGE_POOLS[role.id]
+      const topic = topicRef.current
+      // 有议题时优先围绕议题发言（每隔两条穿插一条通用话术保持讨论活性）
+      const useTopic = !!topic && idx % 3 !== 2
+      const pool = useTopic ? TOPIC_MESSAGE_POOLS[role.id] : MESSAGE_POOLS[role.id]
+      const line = pool[idx % pool.length].replaceAll('{topic}', topic || '当前议题')
       const mockText = replyTo
-        ? `关于你说的「${replyTo.slice(0, 14)}${replyTo.length > 14 ? '…' : ''}」，我的视角是：${pool[idx % pool.length]}`
-        : pool[idx % pool.length]
+        ? `关于你说的「${replyTo.slice(0, 14)}${replyTo.length > 14 ? '…' : ''}」，我的视角是：${line}`
+        : line
       const provider = providerRef.current
       if (!provider) {
         // 演示模式：直接走本地话术
