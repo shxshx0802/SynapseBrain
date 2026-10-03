@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>SynapseBrain · 跳转中</title>
+  <script>
+    // GitHub Pages SPA 回退：未知路径统一回到首页，把真实路径编码进 ?p= 交给应用还原
+    var seg = 'SynapseBrain'
+    var rest = location.pathname.replace(new RegExp('^/' + seg + '/?'), '/')
+    var target = '/' + seg + '/?p=' + encodeURIComponent(rest + location.search) + location.hash
+    location.replace(target)
+  </script>
+</head>
+<body></body>
+</html>
