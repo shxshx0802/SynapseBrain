@@ -3,6 +3,7 @@ import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision'
 import { Camera, FlipHorizontal2, Hand, Mic, MicOff, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { describeMediaError } from '@/shared/mediaError'
 
 /** 手势状态：拳头 / 张开 / 食指指向 / 无 */
 type HandGesture = 'none' | 'fist' | 'open' | 'point'
@@ -229,10 +230,12 @@ export default function GestureLab() {
   /** 手势引擎只需创建一次，摄像头可反复启停 */
   const ensureLandmarker = async () => {
     if (landmarkerRef.current) return
-    const vision = await FilesetResolver.forVisionTasks('/mp/wasm')
+    // 必须用 BASE_URL 拼路径：GitHub Pages 部署在 /SynapseBrain/ 子路径，硬编码 '/mp/...' 会 404
+    const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+    const vision = await FilesetResolver.forVisionTasks(`${base}mp/wasm`)
     // CPU 推理：部分显卡驱动下 GPU 推理（WebGL）与画布绘制并存会崩 GPU 进程导致整页黑屏
     landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: '/mp/hand_landmarker.task', delegate: 'CPU' },
+      baseOptions: { modelAssetPath: `${base}mp/hand_landmarker.task`, delegate: 'CPU' },
       runningMode: 'VIDEO',
       numHands: 2,
       minHandDetectionConfidence: 0.5,
@@ -304,8 +307,9 @@ export default function GestureLab() {
       rafRef.current = requestAnimationFrame(loop)
     } catch (err) {
       setCamStatus('error')
-      setCamError(err instanceof Error ? err.message : String(err))
-      addLog(`❌ 摄像头/手势启动失败：${err instanceof Error ? err.message : err}`)
+      const msg = describeMediaError(err, '摄像头')
+      setCamError(msg)
+      addLog(`❌ ${msg}`)
     }
   }
 
@@ -524,7 +528,7 @@ export default function GestureLab() {
       addLog('🎙️ 麦克风权限已获取')
     } catch (err) {
       setVoiceError('麦克风权限被拒')
-      addLog(`⚠️ 麦克风权限被拒：${err instanceof Error ? err.message : err}`)
+      addLog(`⚠️ ${describeMediaError(err, '麦克风')}`)
       if (hadCamera) void startCamera()
       return
     }

@@ -3,6 +3,7 @@ import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision'
 import { ChevronDown, ChevronUp, Hand, Mic, MicOff, Video, VideoOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { describeMediaError } from '@/shared/mediaError'
 
 /** 手势状态：拳头 / 张开 / 食指指向 / 无（与实验室同一套判定，改动需同步 src/lab/GestureLab.tsx） */
 type HandGesture = 'none' | 'fist' | 'open' | 'point'
@@ -224,11 +225,14 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
 
   const ensureLandmarker = async () => {
     if (landmarkerRef.current) return
-    const vision = await FilesetResolver.forVisionTasks('/mp/wasm')
+    // 注意：必须用 import.meta.env.BASE_URL 拼路径——GitHub Pages 部署在 /SynapseBrain/ 子路径，
+    // 硬编码 '/mp/...' 会 404，模型永远加载不出来；本地 base 为 '/'，拼接后同样正确
+    const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+    const vision = await FilesetResolver.forVisionTasks(`${base}mp/wasm`)
     // CPU 推理：部分显卡驱动下 GPU 推理（WebGL）与画布绘制并存会崩 GPU 进程导致整页黑屏，
     // 稳定性优先改用 CPU；分辨率降到 480x360 控制 CPU 占用
     landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: '/mp/hand_landmarker.task', delegate: 'CPU' },
+      baseOptions: { modelAssetPath: `${base}mp/hand_landmarker.task`, delegate: 'CPU' },
       runningMode: 'VIDEO',
       numHands: 2,
       minHandDetectionConfidence: 0.5,
@@ -281,7 +285,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
       }
       rafRef.current = requestAnimationFrame(loop)
     } catch (err) {
-      addLog(`❌ 摄像头启动失败：${err instanceof Error ? err.message : err}`)
+      addLog(`❌ ${describeMediaError(err, '摄像头')}`)
     } finally {
       setCamBusy(false)
     }
@@ -476,7 +480,7 @@ export function GestureVoiceDock({ onZoom, onVoiceCommand, onVoiceControl, onTil
       s.getTracks().forEach((t) => t.stop())
     } catch (err) {
       setVoiceError('麦克风权限被拒')
-      addLog(`⚠️ 麦克风权限被拒：${err instanceof Error ? err.message : err}`)
+      addLog(`⚠️ ${describeMediaError(err, '麦克风')}`)
       if (hadCamera) void startVideo()
       return
     }
