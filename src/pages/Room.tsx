@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
-import { ArrowLeft, FileDown, Gauge, History, LayoutGrid, Orbit, Pause, Play, Plug, Sparkles, X, Zap } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
+import { ArrowLeft, FileDown, Gauge, History, LayoutGrid, Orbit, Pause, Play, Plug, Share2, Sparkles, Users, X, Zap } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { CanvasBoard } from '@/components/CanvasBoard'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { DiscussionPanel } from '@/components/DiscussionPanel'
@@ -13,11 +21,21 @@ import { SphereDetail } from '@/components/SphereDetail'
 import { ApiKeyDialog } from '@/components/ApiKeyDialog'
 import { useDiscussion } from '@/hooks/useDiscussion'
 import { getProject } from '@/shared/storage'
+import { connectCollab, type CollabHandle } from '@/shared/collab'
+import GuestRoom from './GuestRoom'
 
-export default function Room() {
+/** 房间入口：有 ?join=1 参数且本机不是项目创建者 → 协作者只读房间；否则房主房间 */
+export default function RoomGate() {
+  const { id = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const isGuest = searchParams.has('join') && !getProject(id)
+  return isGuest ? <GuestRoom /> : <HostRoom />
+}
+
+function HostRoom() {
   const { id = '' } = useParams()
   const {
-    mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument,
+    mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, ingestDocument,
     approveRole, moveSphere, resizeSphere, layoutSpheres,
     quotaHistory, timeline, conclusions, digest, converge, reportMarkdown, governorOn, toggleGovernor,
   } = useDiscussion(id)
@@ -33,7 +51,74 @@ export default function Room() {
   const [fatal, setFatal] = useState<string | null>(null)
   const [lastCrash, setLastCrash] = useState<string | null>(null)
   const [apiDialogOpen, setApiDialogOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [guestCount, setGuestCount] = useState(0)
+  const [collabMsg, setCollabMsg] = useState('')
+  const [copied, setCopied] = useState(false)
+  const collabRef = useRef<CollabHandle | null>(null)
   const project = getProject(id)
+
+  /** 协作通道（房主侧）：广播房间快照给协作者，接收协作者拖入的文件交给引擎 */
+  useEffect(() => {
+    if (!id) return
+    const handle = connectCollab({
+      roomId: id,
+      asHost: true,
+      onFile: (doc) => ingestDocument(doc, true),
+      onGuestCount: (n) => {
+        setGuestCount(n)
+        // 有协作者（刚）上线/掉线 → 立刻推一份最新快照，让新加入者马上看到内容
+        publishRef.current?.()
+      },
+      onStatus: (m) => setCollabMsg(m),
+    })
+    collabRef.current = handle
+    return () => {
+      handle.close()
+      collabRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  /** 快照发布函数（被状态变更与新协作者上线共同触发；collab 内部限流 700ms） */
+  const publishRef = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    publishRef.current = () => {
+      const p = getProject(id)
+      collabRef.current?.publishState({
+        name: p?.name ?? '议题房间',
+        topic: p?.topic ?? '',
+        enginePaused,
+        roles,
+        messages,
+        spheres,
+        bubbles,
+        merged,
+        digest,
+        conclusions,
+        guestCount: collabRef.current?.guestCount() ?? 0,
+      })
+    }
+  })
+  useEffect(() => {
+    publishRef.current?.()
+  }, [roles, messages, spheres, bubbles, merged, digest, conclusions, enginePaused])
+
+  const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}room/${id}?join=1`
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = shareUrl
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      ta.remove()
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2000)
+  }
 
   /** 崩溃自检：心跳标记 + 全局异常捕获 + 上次会话异常退出检测。
       目的：把「点击按钮后整页黑屏」从不可见故障变成可见错误卡/可上报记录 */
@@ -204,6 +289,22 @@ export default function Room() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 rounded-lg border-white/15 bg-black/50 text-xs hover:bg-white/10"
+            onClick={() => setInviteOpen(true)}
+            title="邀请协作者加入：对方只能观看讨论和拖文件，操控权在你"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            邀请
+            {guestCount > 0 && (
+              <span className="ml-0.5 flex items-center gap-0.5 rounded-full bg-emerald-500/20 px-1.5 py-px text-[10px] text-emerald-300">
+                <Users className="h-2.5 w-2.5" />
+                {guestCount}
+              </span>
+            )}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -473,6 +574,42 @@ export default function Room() {
           )}
 
           <ApiKeyDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />
+
+          {/* 邀请协作者 */}
+          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+            <DialogContent className="border-white/15 bg-black/95 text-slate-100 shadow-2xl backdrop-blur sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-white">
+                  <Share2 className="h-4 w-4" />
+                  邀请协作者
+                </DialogTitle>
+                <DialogDescription className="text-slate-500">
+                  把链接发给他人即可加入这个议题房间。协作者可以实时观看讨论、随时拖入文件让 AI 阅读；
+                  暂停、收敛、整理布局等操控权只在你这里。
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={shareUrl}
+                    onFocus={(e) => e.target.select()}
+                    className="h-10 border-white/10 bg-black/60 font-mono text-xs text-slate-300 focus-visible:border-white/30"
+                  />
+                  <Button size="sm" className="h-10 shrink-0 bg-white text-xs text-black hover:bg-slate-200" onClick={copyLink}>
+                    {copied ? '已复制' : '复制'}
+                  </Button>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  {guestCount > 0 ? `当前 ${guestCount} 位协作者在线。` : '暂无协作者在线。'}
+                  {collabMsg && ` ${collabMsg}`}
+                </p>
+                <p className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+                  提示：房间数据通过公共消息中转同步，请勿在讨论中发送敏感机密内容。
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>

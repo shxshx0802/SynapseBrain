@@ -3,7 +3,7 @@ import type { AIRole, ChatMessage, Conclusion, KeySphereT, MergedPair, QuotaPoin
 import { isLiveMode } from '@/shared/config'
 import { getProject, loadRoomState, saveRoomState, touchProject } from '@/shared/storage'
 import { createDefaultProvider, type ChatProvider, type ContentPart, type ProviderMessage } from '@/ai/provider'
-import { extractDocument } from '@/ai/document'
+import { extractDocument, type ExtractedDoc } from '@/ai/document'
 import {
   HUMAN_ID,
   INITIAL_ROLES,
@@ -441,7 +441,60 @@ export function useDiscussion(roomId: string) {
     [postAI, pushMessage, recordTimeline, boostByRelevance],
   )
 
-  /** 拖入文件：提取内容 → 展示摘要 → 让 AI 立刻阅读并结合议题讨论 */
+  /** 已提取文档进入讨论（房主本地拖文件与协作者网络转发共用同一入口） */
+  const ingestDocument = useCallback(
+    (doc: ExtractedDoc, fromGuest = false) => {
+      const head = doc.kind === 'text' ? doc.content.slice(0, 500) : `[图片 ${(doc.size / 1024).toFixed(1)} KB]`
+      const visible =
+        `📎 ${fromGuest ? '协作者' : '我'}拖入了文件《${doc.name}》` +
+        (doc.kind === 'text' ? `（全文 ${doc.size.toLocaleString()} 字${doc.truncated ? '，已截断' : ''}）` : '') +
+        `：\n「${head}${doc.kind === 'text' && doc.content.length > 500 ? '…' : ''}」\n请大家阅读这份材料，结合议题从各自方向展开讨论。`
+      pushMessage(HUMAN_ID, visible)
+      void (async () => {
+        const provider = providerRef.current
+        const active = rolesRef.current.filter((r) => !r.paused)
+        if (!provider || !active.length || inflightRef.current >= MAX_INFLIGHT) {
+          window.setTimeout(() => postAI(visible), 500)
+          return
+        }
+        const role = active[Math.floor(Math.random() * active.length)]
+        inflightRef.current += 1
+        const tmpId = makeId()
+        pushMessage(role.id, '…')
+        try {
+          const topicLine = topicRef.current ? `当前议题：「${topicRef.current}」。` : ''
+          const userContent: string | ContentPart[] =
+            doc.kind === 'image'
+              ? [
+                  { type: 'image_url', image_url: { url: doc.content } },
+                  { type: 'text', text: `${topicLine}人类参与者拖入了图片《${doc.name}》。请描述图中内容，并分析它与当前讨论的关系，80 字以内。` },
+                ]
+              : `${topicLine}人类参与者拖入了文件《${doc.name}》${doc.truncated ? '（内容较长已截断）' : ''}，全文如下：\n\n${doc.content}\n\n请阅读后给出你这个方向的核心判断（100 字以内），并点出最值得做成关键球的一个概念。`
+          const res = await provider.chat(
+            [
+              { role: 'system', content: SYSTEM_PROMPTS[role.id] + OUTPUT_GUARD },
+              ...recentContext(),
+              { role: 'user', content: userContent },
+            ],
+            { maxTokens: role.downshifted ? 400 : 800 },
+          )
+          const cleaned = sanitizeModelOutput(res.text)
+          if (cleaned.length < 4) throw new Error('模型输出被清洗后过短')
+          replaceMessage(role.id, tmpId, cleaned)
+          chargeRole(role.id, res.tokens)
+          if (Math.random() < 0.6) void spawnSphereLive(role, cleaned, provider)
+        } catch (err) {
+          console.warn('[KeySphere] 文档阅读失败：', err)
+          replaceMessage(role.id, tmpId, `（我没能读完这份文件，可能是网络或额度问题。）`)
+        } finally {
+          inflightRef.current -= 1
+        }
+      })()
+    },
+    [chargeRole, postAI, pushMessage, recentContext, replaceMessage, spawnSphereLive],
+  )
+
+  /** 拖入文件：本地提取内容后进入讨论 */
   const attachDocument = useCallback(
     (file: File) => {
       const pendingId = makeId()
@@ -452,57 +505,17 @@ export function useDiscussion(roomId: string) {
       void (async () => {
         try {
           const doc = await extractDocument(file)
-          const head = doc.kind === 'text' ? doc.content.slice(0, 500) : `[图片 ${(doc.size / 1024).toFixed(1)} KB]`
-          const visible =
-            `📎 我拖入了文件《${doc.name}》` +
-            (doc.kind === 'text' ? `（全文 ${doc.size.toLocaleString()} 字${doc.truncated ? '，已截断' : ''}）` : '') +
-            `：\n「${head}${doc.kind === 'text' && doc.content.length > 500 ? '…' : ''}」\n请大家阅读这份材料，结合议题从各自方向展开讨论。`
-          replaceMessage(HUMAN_ID, pendingId, visible)
-
-          const provider = providerRef.current
-          const active = rolesRef.current.filter((r) => !r.paused)
-          if (!provider || !active.length || inflightRef.current >= MAX_INFLIGHT) {
-            window.setTimeout(() => postAI(visible), 500)
-            return
-          }
-          const role = active[Math.floor(Math.random() * active.length)]
-          inflightRef.current += 1
-          const tmpId = makeId()
-          pushMessage(role.id, '…')
-          try {
-            const topicLine = topicRef.current ? `当前议题：「${topicRef.current}」。` : ''
-            const userContent: string | ContentPart[] =
-              doc.kind === 'image'
-                ? [
-                    { type: 'image_url', image_url: { url: doc.content } },
-                    { type: 'text', text: `${topicLine}人类参与者拖入了图片《${doc.name}》。请描述图中内容，并分析它与当前讨论的关系，80 字以内。` },
-                  ]
-                : `${topicLine}人类参与者拖入了文件《${doc.name}》${doc.truncated ? '（内容较长已截断）' : ''}，全文如下：\n\n${doc.content}\n\n请阅读后给出你这个方向的核心判断（100 字以内），并点出最值得做成关键球的一个概念。`
-            const res = await provider.chat(
-              [
-                { role: 'system', content: SYSTEM_PROMPTS[role.id] + OUTPUT_GUARD },
-                ...recentContext(),
-                { role: 'user', content: userContent },
-              ],
-              { maxTokens: role.downshifted ? 400 : 800 },
-            )
-            const cleaned = sanitizeModelOutput(res.text)
-            if (cleaned.length < 4) throw new Error('模型输出被清洗后过短')
-            replaceMessage(role.id, tmpId, cleaned)
-            chargeRole(role.id, res.tokens)
-            if (Math.random() < 0.6) void spawnSphereLive(role, cleaned, provider)
-          } catch (err) {
-            console.warn('[KeySphere] 文档阅读失败：', err)
-            replaceMessage(role.id, tmpId, `（我没能读完这份文件，可能是网络或额度问题。）`)
-          } finally {
-            inflightRef.current -= 1
-          }
+          setMessages((prev) => {
+            const list = prev[HUMAN_ID] ?? []
+            return { ...prev, [HUMAN_ID]: list.filter((m) => m.id !== pendingId) }
+          })
+          ingestDocument(doc)
         } catch (err) {
           replaceMessage(HUMAN_ID, pendingId, `⚠️ 文件《${file.name}》处理失败：${(err as Error).message}`)
         }
       })()
     },
-    [chargeRole, postAI, pushMessage, recentContext, replaceMessage, spawnSphereLive],
+    [ingestDocument, pushMessage, replaceMessage],
   )
 
   const approveRole = useCallback((roleId: string) => {
@@ -871,7 +884,7 @@ export function useDiscussion(roomId: string) {
   }, [recordTimeline])
 
   return {
-    mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument,
+    mode, roles, messages, spheres, bubbles, merged, enginePaused, toggleEngine, sendHuman, attachDocument, ingestDocument,
     approveRole, moveSphere, resizeSphere, layoutSpheres,
     quotaHistory, timeline, conclusions, digest, converge, reportMarkdown, governorOn, toggleGovernor,
   }

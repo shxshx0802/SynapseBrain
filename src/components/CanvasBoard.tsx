@@ -26,9 +26,11 @@ interface Props {
   onResizeSphere: (id: string, r: number) => void
   onAttachFile: (file: File) => void
   onInspect: (id: string) => void
+  /** 协作者只读模式：可看可平移缩放可双击查看，但不能拖动/缩放关键球 */
+  readOnly?: boolean
 }
 
-export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, zoomRequest, tilt, onMoveSphere, onResizeSphere, onAttachFile, onInspect }: Props) {
+export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, enginePaused, fitRequest, zoomRequest, tilt, onMoveSphere, onResizeSphere, onAttachFile, onInspect, readOnly = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fxCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -242,7 +244,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
       e.preventDefault()
       // 悬停在关键球上滚动 = 调节球大小；空白处滚动 = 缩放画布
       const sphereEl = (e.target as HTMLElement).closest('[data-sphere]') as HTMLElement | null
-      if (sphereEl) {
+      if (sphereEl && !readOnly) {
         const s = spheres.find((x) => x.id === sphereEl.dataset.sid)
         if (s) onResizeSphere(s.id, s.r * Math.exp(-e.deltaY * 0.0015))
         return
@@ -260,7 +262,7 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [spheres, onResizeSphere])
+  }, [spheres, onResizeSphere, readOnly])
 
   const localPoint = (e: React.PointerEvent) => {
     const rect = containerRef.current!.getBoundingClientRect()
@@ -270,13 +272,18 @@ export function CanvasBoard({ spheres, bubbles, merged, roles, reduceMotion, eng
 
   const onSpherePointerDown = (e: React.PointerEvent, id: string) => {
     e.stopPropagation()
+    const s = spheres.find((x) => x.id === id)
+    if (!s) return
+    if (readOnly) {
+      // 只读模式保留双击查看内容，但不进入拖动/捏合
+      tapRef.current = { id: s.id, t: Date.now(), x: e.clientX, y: e.clientY, moved: false }
+      return
+    }
     try {
       containerRef.current?.setPointerCapture(e.pointerId)
     } catch {
       /* 合成事件无活动指针，忽略 */
     }
-    const s = spheres.find((x) => x.id === id)
-    if (!s) return
     const p = localPoint(e)
     pointersRef.current.set(e.pointerId, { ...p, sphereId: id })
     const w = toWorld(p.x, p.y, viewRef.current)

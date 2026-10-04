@@ -13,6 +13,8 @@ interface Props {
   onSend: (text: string) => void
   /** 主持人 / 调度官的最新动态 */
   digest?: string | null
+  /** 协作者只读模式：隐藏插话输入与额度放行，只保留观看 */
+  guest?: boolean
 }
 
 function RoleAvatar({ color, name, size = 22 }: { color: string; name: string; size?: number }) {
@@ -41,7 +43,7 @@ function ThinkingDots() {
   )
 }
 
-export function DiscussionPanel({ roles, messages, onApprove, onSend, digest }: Props) {
+export function DiscussionPanel({ roles, messages, onApprove, onSend, digest, guest = false }: Props) {
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -97,11 +99,12 @@ export function DiscussionPanel({ roles, messages, onApprove, onSend, digest }: 
                   剩 {Math.round(remaining * 100)}% · {(r.budget - r.used).toLocaleString()} tok
                 </span>
                 {status === 'downshifted' && <span className="text-amber-400/90">已降档</span>}
-                {status === 'paused' && (
+                {status === 'paused' && !guest && (
                   <button className="cursor-pointer font-semibold text-red-400 hover:text-red-300" onClick={() => onApprove(r.id)}>
                     待批准 · 放行 50%
                   </button>
                 )}
+                {status === 'paused' && guest && <span className="text-red-400/80">已暂停</span>}
               </div>
             </div>
           )
@@ -145,21 +148,29 @@ export function DiscussionPanel({ roles, messages, onApprove, onSend, digest }: 
         </div>
       </div>
 
-      {/* 人类发言输入 */}
-      <div className="border-t border-white/8 p-3">
-        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 p-1.5 transition-colors focus-within:border-white/25">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-            placeholder="插话，让所有方向听到…"
-            className="h-8 border-0 bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
-          />
-          <Button size="icon" className="h-8 w-8 shrink-0 rounded-lg" onClick={submit} disabled={!draft.trim()}>
-            <SendHorizontal className="h-4 w-4" />
-          </Button>
+      {/* 人类发言输入（协作者模式隐藏：插话权限归房主） */}
+      {guest ? (
+        <div className="border-t border-white/8 p-3">
+          <p className="rounded-lg border border-white/8 bg-black/50 px-3 py-2 text-center text-[11px] text-slate-500">
+            协作者模式 · 可以拖文件到画布参与讨论，操控权在房主
+          </p>
         </div>
-      </div>
+      ) : (
+        <div className="border-t border-white/8 p-3">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 p-1.5 transition-colors focus-within:border-white/25">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              placeholder="插话，让所有方向听到…"
+              className="h-8 border-0 bg-transparent px-2 text-[13px] shadow-none focus-visible:ring-0"
+            />
+            <Button size="icon" className="h-8 w-8 shrink-0 rounded-lg" onClick={submit} disabled={!draft.trim()}>
+              <SendHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
